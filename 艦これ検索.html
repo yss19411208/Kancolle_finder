@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>艦これドロップ検索</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Yu Gothic', 'Meiryo', sans-serif;
+            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 50%, #7e22ce 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 24px;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.25);
+            padding: 0;
+            max-width: 480px;
+            width: 100%;
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 32px 32px 28px;
+            text-align: center;
+        }
+
+        h1 {
+            color: white;
+            font-size: 24px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .emoji {
+            font-size: 28px;
+        }
+
+        .content {
+            padding: 32px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            position: relative;
+        }
+
+        select {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            font-size: 15px;
+            background-color: white;
+            cursor: pointer;
+            transition: all 0.2s;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='M5 7.5L10 12.5L15 7.5' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 40px;
+        }
+
+        select:hover {
+            border-color: #667eea;
+        }
+
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+        }
+
+        select:disabled {
+            background-color: #f9fafb;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .search-btn {
+            padding: 14px 28px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+
+        .search-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .search-btn:active {
+            transform: translateY(0);
+        }
+
+        .quick-select {
+            margin-bottom: 24px;
+        }
+
+        .quick-label {
+            font-size: 13px;
+            color: #6b7280;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+
+        .quick-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .quick-btn {
+            padding: 8px 14px;
+            background: #f3f4f6;
+            border: 1.5px solid #e5e7eb;
+            border-radius: 20px;
+            font-size: 13px;
+            color: #374151;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        .quick-btn:hover {
+            background: #e5e7eb;
+            border-color: #d1d5db;
+        }
+
+        .quick-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: transparent;
+        }
+
+        .result {
+            margin-top: 0;
+            padding: 24px;
+            background: linear-gradient(135deg, #f0f4ff 0%, #f3e8ff 100%);
+            border-radius: 16px;
+            display: none;
+            border: 2px solid #e5e7eb;
+        }
+
+        .result.show {
+            display: block;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .result-title {
+            color: #1f2937;
+            font-weight: 700;
+            font-size: 15px;
+        }
+
+        .ship-name {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+
+        .error {
+            color: #dc2626;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .area-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .area-tag {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.25);
+            transition: all 0.2s;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .area-tag:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            background: linear-gradient(135deg, #7c8ef5 0%, #8b5bb8 100%);
+        }
+
+        .area-tag:active {
+            transform: scale(0.95);
+        }
+
+        .count-badge {
+            display: inline-block;
+            background: rgba(102, 126, 234, 0.15);
+            color: #667eea;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #6b7280;
+        }
+
+        .loading-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #e5e7eb;
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 540px) {
+            .container {
+                max-width: 100%;
+            }
+
+            .search-box {
+                flex-direction: column;
+            }
+
+            .search-btn {
+                width: 100%;
+            }
+
+            h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><span class="emoji">⚓</span>艦これドロップ検索</h1>
+        </div>
+        
+        <div class="content">
+            <div class="quick-select">
+                <div class="quick-label">艦種クイック選択</div>
+                <div class="quick-buttons">
+                    <button class="quick-btn" data-type="0">戦艦</button>
+                    <button class="quick-btn" data-type="1">空母</button>
+                    <button class="quick-btn" data-type="2">重巡洋艦</button>
+                    <button class="quick-btn" data-type="3">軽巡洋艦</button>
+                    <button class="quick-btn" data-type="4">駆逐艦</button>
+                    <button class="quick-btn" data-type="5">海防艦</button>
+                    <button class="quick-btn" data-type="6">潜水艦</button>
+                    <button class="quick-btn" data-type="7">補助艦艇</button>
+                </div>
+            </div>
+
+            <div class="search-box">
+                <div class="input-wrapper">
+                    <select id="shipName" disabled>
+                        <option value="" disabled selected>艦種を選択してください</option>
+                    </select>
+                </div>
+                <button class="search-btn" onclick="searchDrop()">検索</button>
+            </div>
+
+            <div id="result" class="result">
+                <div id="resultContent"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let jsonData = null;
+        let currentShipType = null;
+
+        // ページ読み込み時の処理
+        window.addEventListener('load', async function() {
+            // index.jsonを自動取得
+            try {
+                const response = await fetch('index.json');
+                jsonData = await response.json();
+                console.log('JSONデータ読み込み完了');
+            } catch (error) {
+                console.log('外部JSONの読み込みに失敗。代替方法を試みます。');
+                // ユーザーにファイル選択を促す
+                showFileUploadOption();
+            }
+        });
+
+        // ファイルアップロードオプションを表示
+        function showFileUploadOption() {
+            const resultDiv = document.getElementById('result');
+            const resultContent = document.getElementById('resultContent');
+            
+            resultContent.innerHTML = `
+                <div style="text-align: center;">
+                    <div style="margin-bottom: 12px; color: #6b7280;">JSONファイルを選択してください</div>
+                    <input type="file" id="jsonFileInput" accept=".json" style="display: none;">
+                    <button onclick="document.getElementById('jsonFileInput').click()" 
+                            style="padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;">
+                        ファイルを選択
+                    </button>
+                </div>
+            `;
+            resultDiv.classList.add('show');
+
+            document.getElementById('jsonFileInput').addEventListener('change', function(e) {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = function(event) {
+                        try {
+                            jsonData = JSON.parse(event.target.result);
+                            resultDiv.classList.remove('show');
+                            alert('データ読み込み完了！艦種を選択してください。');
+                        } catch (error) {
+                            alert('JSONファイルの読み込みに失敗しました。');
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            });
+        }
+
+        // クイック選択ボタンのイベント
+        document.querySelectorAll('.quick-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // アクティブ状態の切り替え
+                document.querySelectorAll('.quick-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+
+                const shipTypeIndex = this.dataset.type;
+                currentShipType = shipTypeIndex;
+                updateShipNames(shipTypeIndex);
+            });
+        });
+
+        // 艦船名の更新
+        function updateShipNames(shipTypeIndex) {
+            const shipNameSelect = document.getElementById('shipName');
+            
+            if (!jsonData) {
+                alert('データが読み込まれていません');
+                return;
+            }
+
+            // 艦船名の選択肢をクリア
+            shipNameSelect.innerHTML = '<option value="" disabled selected>艦船名を選択してください</option>';
+            shipNameSelect.disabled = false;
+
+            // 選択された艦種のデータから艦船名を取得
+            const shipTypeData = jsonData[shipTypeIndex];
+            const shipNames = Object.keys(shipTypeData);
+
+            // 艦船名の選択肢を追加
+            shipNames.forEach(name => {
+                const option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                shipNameSelect.appendChild(option);
+            });
+
+            // 結果をクリア
+            document.getElementById('result').classList.remove('show');
+        }
+
+        // 検索処理
+        function searchDrop() {
+            const shipName = document.getElementById('shipName').value;
+            const resultDiv = document.getElementById('result');
+            const resultContent = document.getElementById('resultContent');
+
+            if (!currentShipType || !shipName) {
+                resultContent.innerHTML = '<div class="error">⚠️ 艦種と艦船名を選択してください</div>';
+                resultDiv.classList.add('show');
+                return;
+            }
+
+            if (!jsonData) {
+                resultContent.innerHTML = '<div class="error">⚠️ データが読み込まれていません</div>';
+                resultDiv.classList.add('show');
+                return;
+            }
+
+            try {
+                const dropAreas = jsonData[currentShipType][shipName];
+                
+                if (dropAreas && dropAreas.length > 0) {
+                    // 海域タグをリンク付きで生成
+                    const areaTagsHtml = dropAreas.map(area => 
+                        `<a href="https://zekamashi.net/kancolle-kouryaku/${area}/" target="_blank" class="area-tag">${area}</a>`
+                    ).join('');
+                    
+                    resultContent.innerHTML = `
+                        <div class="result-header">
+                            <div class="result-title">ドロップ海域</div>
+                            <span class="count-badge">${dropAreas.length}箇所</span>
+                        </div>
+                        <div class="ship-name">${shipName}</div>
+                        <div class="area-tags">${areaTagsHtml}</div>
+                    `;
+                } else {
+                    resultContent.innerHTML = '<div class="error">⚠️ ドロップ情報が見つかりませんでした</div>';
+                }
+                
+                resultDiv.classList.add('show');
+            } catch (error) {
+                resultContent.innerHTML = '<div class="error">⚠️ 検索中にエラーが発生しました</div>';
+                resultDiv.classList.add('show');
+                console.error('検索エラー:', error);
+            }
+        }
+
+        // Enterキーで検索
+        document.getElementById('shipName').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchDrop();
+            }
+        });
+
+        // 艦船名選択時に自動検索
+        document.getElementById('shipName').addEventListener('change', function() {
+            if (this.value) {
+                searchDrop();
+            }
+        });
+    </script>
+</body>
+</html>
