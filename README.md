@@ -11,11 +11,6 @@
 - 🔗 **攻略ページへのリンク** - 海域をクリックすると攻略ページが開きます
 - 📱 **レスポンシブ対応** - スマホでも快適に使用可能
 - 🚀 **高速動作** - 純粋なHTML/CSS/JavaScriptで動作
-
-## デモ
-
-GitHub Pagesでデモを公開中: [デモページを見る](#)
-
 ## 使い方
 
 ### オンライン版
@@ -25,24 +20,7 @@ GitHub Pagesでデモを公開中: [デモページを見る](#)
 3. 艦船名を選択
 4. ドロップ海域が表示されます
 5. 海域タグをクリックすると攻略ページが開きます
-
-### ローカルで使用
-
-```bash
-# リポジトリをクローン
-git clone https://github.com/YOUR_USERNAME/kancolle-drop-search.git
-
-# ディレクトリに移動
-cd kancolle-drop-search
-
-# ローカルサーバーを起動（推奨）
-python -m http.server 8000
-
-# ブラウザで http://localhost:8000 を開く
-```
-
-または、`艦これ検索_final.html`をブラウザで直接開いてください。
-
+6. 
 ## ファイル構成
 
 ```
@@ -95,16 +73,6 @@ HTMLファイル内の`<style>`タグ内でCSSをカスタマイズできます�
 ## ライセンス
 
 MIT License
-
-## 貢献
-
-プルリクエストを歓迎します！
-
-1. このリポジトリをフォーク
-2. 新しいブランチを作成 (`git checkout -b feature/amazing-feature`)
-3. 変更をコミット (`git commit -m 'Add some amazing feature'`)
-4. ブランチにプッシュ (`git push origin feature/amazing-feature`)
-5. プルリクエストを作成
 
 ## クレジット
 
