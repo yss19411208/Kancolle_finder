@@ -83,88 +83,103 @@ border-radius:8px;
 <script>
 
 let database={};
+let shipIndex=[];
+let mapIndex={};
 
-fetch("./data.json")
-.then(r=>r.json())
-.then(data=>{
-database=data;
-initUI();
-});
+const results=document.getElementById("results");
 
-function switchMode(){
-const mode=document.querySelector('input[name="mode"]:checked').value;
-document.getElementById("shipSearch").classList.toggle("hidden",mode!=="ship");
-document.getElementById("mapSearch").classList.toggle("hidden",mode!=="map");
-document.getElementById("shipInfo").innerHTML="";
-document.getElementById("results").innerHTML="";
+/* ---------- JSON読み込み ---------- */
+
+async function loadDB(){
+results.innerHTML="データ読み込み中...";
+
+const res=await fetch("./data.json");
+database=await res.json();
+
+/* インデックス作成（ここが超重要：先に軽量化） */
+
+for(const ship in database){
+
+shipIndex.push(ship);
+
+const data=database[ship];
+
+for(const key in data){
+if(key==="type"||key==="modify") continue;
+
+if(!mapIndex[key]) mapIndex[key]=[];
+mapIndex[key].push(ship);
 }
+
+}
+
+initUI();
+results.innerHTML="準備完了";
+}
+
+loadDB();
+
+/* ---------- UI初期化 ---------- */
 
 function initUI(){
 
 /* 艦種 */
 const typeSelect=document.getElementById("type");
 const types=new Set();
-for(const s in database) types.add(database[s].type);
+shipIndex.forEach(s=>types.add(database[s].type));
 typeSelect.innerHTML='<option value="">指定なし</option>';
 types.forEach(t=>typeSelect.innerHTML+=`<option>${t}</option>`);
 
 /* 艦名 */
-function updateShips(){
 const shipSelect=document.getElementById("ship");
+function updateShips(){
 shipSelect.innerHTML='<option value="">選択してください</option>';
-for(const s in database){
-if(!typeSelect.value || database[s].type===typeSelect.value)
+shipIndex.forEach(s=>{
+if(!typeSelect.value||database[s].type===typeSelect.value)
 shipSelect.innerHTML+=`<option>${s}</option>`;
-}
+});
 }
 typeSelect.onchange=updateShips;
 updateShips();
 
 /* 海域 */
 const mapSelect=document.getElementById("map");
-const maps=new Set();
-for(const ship in database){
-for(const key in database[ship]){
-if(key==="type"||key==="modify") continue;
-maps.add(key);
-}
-}
 mapSelect.innerHTML='<option value="">選択してください</option>';
-maps.forEach(m=>mapSelect.innerHTML+=`<option>${m}</option>`);
+Object.keys(mapIndex).sort().forEach(m=>{
+mapSelect.innerHTML+=`<option>${m}</option>`;
+});
 
-document.getElementById("results").innerHTML="準備完了";
 }
 
-/* 艦検索 */
-function searchShip(){
+/* ---------- 艦検索（分割描画） ---------- */
+
+async function searchShip(){
 
 const ship=document.getElementById("ship").value;
 if(!ship) return;
 
+document.getElementById("shipInfo").innerHTML="";
+results.innerHTML="検索中...";
+
+await new Promise(r=>setTimeout(r,50));
+
 const shipData=database[ship];
-const infoBox=document.getElementById("shipInfo");
-const results=document.getElementById("results");
 
-results.innerHTML="";
-
-/* 改造情報表示 */
-let modifyHTML="<div class='shipInfo'><b>"+ship+"</b><br>改造レベル:<br>";
-
+/* 改造情報 */
+let html="<div class='shipInfo'><b>"+ship+"</b><br>改造:<br>";
 if(shipData.modify){
-for(const m in shipData.modify){
-modifyHTML+=m+" : Lv"+shipData.modify[m]+"<br>";
+for(const m in shipData.modify)
+html+=`${m} Lv${shipData.modify[m]}<br>`;
 }
-}else{
-modifyHTML+="改造なし";
-}
+html+="</div>";
+document.getElementById("shipInfo").innerHTML=html;
 
-modifyHTML+="</div>";
-infoBox.innerHTML=modifyHTML;
-
-/* ドロップ一覧 */
-let id=0;
+/* 分割描画 */
+let buffer="";
+let count=0;
 
 for(const area in shipData){
+
 if(area==="type"||area==="modify") continue;
 
 const nodes=shipData[area];
@@ -172,62 +187,81 @@ const nodes=shipData[area];
 for(const node in nodes){
 
 const d=nodes[node];
-id++;
 
-results.innerHTML+=`
-<div class="result" onclick="toggle('d${id}')">
-<b>${area}</b> - マス ${node}
-<div id="d${id}" class="detail">
-勝利: ${d.get_rank.join(",")}<br>
-提督Lv: ${d.level[0]}〜${d.level[1]}
-</div>
+buffer+=`
+<div class="result">
+<b>${area}</b> - マス ${node}<br>
+勝利:${d.get_rank.join(",")}<br>
+提督Lv:${d.level[0]}〜${d.level[1]}
 </div>`;
-}
-}
+
+count++;
+
+/* 20件ごとに描画（これがフリーズ防止） */
+if(count%20===0){
+results.innerHTML+=buffer;
+buffer="";
+await new Promise(r=>setTimeout(r,0));
 }
 
-/* 海域検索 */
-function searchMap(){
+}
+
+}
+
+results.innerHTML+=buffer;
+
+}
+
+/* ---------- 海域検索（高速化版） ---------- */
+
+async function searchMap(){
 
 const map=document.getElementById("map").value;
 if(!map) return;
 
 document.getElementById("shipInfo").innerHTML="";
-const results=document.getElementById("results");
-results.innerHTML="";
+results.innerHTML="検索中...";
 
-let id=0;
+await new Promise(r=>setTimeout(r,50));
 
-for(const ship in database){
+let buffer="";
+let count=0;
 
-const shipData=database[ship];
-if(!shipData[map]) continue;
+const ships=mapIndex[map]||[];
 
-const nodes=shipData[map];
+for(const ship of ships){
+
+const nodes=database[ship][map];
 
 for(const node in nodes){
 
 const d=nodes[node];
-id++;
 
-results.innerHTML+=`
-<div class="result" onclick="toggle('d${id}')">
-<b>${ship}</b> - マス ${node}
-<div id="d${id}" class="detail">
-勝利: ${d.get_rank.join(",")}<br>
-提督Lv: ${d.level[0]}〜${d.level[1]}
-</div>
+buffer+=`
+<div class="result">
+<b>${ship}</b> - マス ${node}<br>
+勝利:${d.get_rank.join(",")}<br>
+提督Lv:${d.level[0]}〜${d.level[1]}
 </div>`;
-}
-}
+
+count++;
+
+if(count%20===0){
+results.innerHTML+=buffer;
+buffer="";
+await new Promise(r=>setTimeout(r,0));
 }
 
-function toggle(id){
-const e=document.getElementById(id);
-e.style.display=e.style.display==="block"?"none":"block";
+}
+
+}
+
+results.innerHTML+=buffer;
+
 }
 
 </script>
 
 </body>
 </html>
+
