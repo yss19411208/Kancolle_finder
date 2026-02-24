@@ -38,7 +38,8 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #cfd6e4;margi
   </div>
 
   <div id="shipArea" style="display:none">
-    <div class="notice">艦を選択すると、その艦がドロップする海域とマス・条件が表示されます。</div>
+    <div class="notice">艦種を選択してから艦を選んでください。</div>
+    <select id="typeSelect"></select>
     <select id="shipSelect"></select>
   </div>
 
@@ -49,6 +50,7 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #cfd6e4;margi
 let RAW = null;
 let mapIndex = {};
 let shipIndex = {};
+let typeIndex = {}; // type -> ships
 
 const result = document.getElementById('result');
 const mapSelect = document.getElementById('mapSelect');
@@ -73,10 +75,13 @@ fetch('data.json', {cache:'no-store'})
   });
 
 function preprocess(){
+  typeIndex = {};
   mapIndex={}; shipIndex={};
   for(const [ship,body] of Object.entries(RAW)){
     const type=body.type||'';
     shipIndex[ship]=[];
+    if(!typeIndex[type]) typeIndex[type]=[];
+    typeIndex[type].push(ship);
     for(const [map,nodes] of Object.entries(body)){
       if(map==='type'||map==='modify') continue;
       if(!mapIndex[map]) mapIndex[map]={};
@@ -97,10 +102,15 @@ function buildLists(){
   Object.keys(mapIndex).sort(mapSort).forEach(m=>{
     const op=document.createElement('option'); op.value=m; op.textContent=m; mapSelect.appendChild(op);
   });
-  shipSelect.innerHTML='';
-  Object.keys(shipIndex).sort((a,b)=>a.localeCompare(b,'ja')).forEach(s=>{
-    const op=document.createElement('option'); op.value=s; op.textContent=s; shipSelect.appendChild(op);
+  // build type list
+  const typeSelect = document.getElementById('typeSelect');
+  typeSelect.innerHTML='';
+  Object.keys(typeIndex).sort((a,b)=>a.localeCompare(b,'ja')).forEach(t=>{
+    const op=document.createElement('option'); op.value=t; op.textContent=t; typeSelect.appendChild(op);
   });
+
+  // initial ship list
+  updateShipList();
 }
 
 for(const r of document.querySelectorAll('input[name="mode"]')){
@@ -114,7 +124,24 @@ for(const r of document.querySelectorAll('input[name="mode"]')){
 mapSelect.onchange=update;
 shipSelect.onchange=update;
 
+const typeSelect = document.getElementById('typeSelect');
+typeSelect.onchange=()=>{
+  updateShipList();
+  update();
+};
+
+function updateShipList(){
+  const typeSelect = document.getElementById('typeSelect');
+  const selectedType = typeSelect.value;
+  shipSelect.innerHTML='';
+  if(!typeIndex[selectedType]) return;
+  typeIndex[selectedType].sort((a,b)=>a.localeCompare(b,'ja')).forEach(s=>{
+    const op=document.createElement('option'); op.value=s; op.textContent=s; shipSelect.appendChild(op);
+  });
+}
+
 function update(){
+
   result.innerHTML='';
   const mode=document.querySelector('input[name="mode"]:checked').value;
   if(mode==='map') showMap(); else showShip();
