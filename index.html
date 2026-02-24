@@ -6,260 +6,200 @@
 <title>艦これドロップ検索</title>
 
 <style>
-body{font-family:sans-serif;background:#0f172a;color:white;margin:0;}
-header{background:#1e293b;padding:14px;font-size:22px;font-weight:bold;}
-.container{padding:15px;}
-.panel{background:#1e293b;padding:15px;margin-bottom:15px;border-radius:12px;}
-select{padding:8px;margin:5px;border-radius:8px;border:none;}
-button{padding:8px 14px;background:#38bdf8;border:none;border-radius:8px;cursor:pointer;font-weight:bold;}
-
-.shipInfo{
-background:#020617;
-padding:12px;
-border-radius:12px;
-margin-bottom:15px;
-border-left:5px solid #22c55e;
+body{
+    font-family: "Segoe UI",sans-serif;
+    background:#f2f4f7;
+    margin:0;
 }
-
-.result{
-background:#020617;
-padding:12px;
-margin-top:10px;
-border-radius:10px;
-cursor:pointer;
+header{
+    background:#2b3a55;
+    color:white;
+    padding:15px;
+    font-size:22px;
+    text-align:center;
 }
-
-.detail{
-display:none;
-margin-top:8px;
-background:#0b1220;
-padding:8px;
-border-radius:8px;
+.container{
+    padding:20px;
+    max-width:1000px;
+    margin:auto;
 }
-.hidden{display:none;}
+select{
+    padding:8px;
+    font-size:16px;
+    margin:5px 0 15px 0;
+    width:100%;
+}
+.card{
+    background:white;
+    border-radius:10px;
+    padding:12px;
+    margin:10px 0;
+    box-shadow:0 2px 6px rgba(0,0,0,0.15);
+}
+.map{
+    font-size:20px;
+    font-weight:bold;
+    margin-top:15px;
+}
+.node{
+    margin-left:15px;
+    margin-top:8px;
+    font-weight:bold;
+    color:#2b3a55;
+}
+.drop{
+    margin-left:30px;
+    padding:4px 0;
+    border-bottom:1px solid #eee;
+}
+.rank{ color:#c0392b; font-weight:bold; }
+.level{ color:#2980b9; }
 </style>
 
 </head>
 
 <body>
-
 <header>艦これ ドロップ検索</header>
 
 <div class="container">
 
-<div class="panel">
+<select id="mode">
+  <option value="map">海域から探す</option>
+  <option value="ship">艦から探す</option>
+</select>
 
-<label><input type="radio" name="mode" value="ship" checked onchange="switchMode()"> 艦から探す</label> <label style="margin-left:20px;"><input type="radio" name="mode" value="map" onchange="switchMode()"> 海域から探す</label>
-
-<div id="shipSearch">
-<br>
-艦種:
-<select id="type"></select>
-艦名:
-<select id="ship"></select>
-<br><br>
-<button onclick="searchShip()">検索</button>
+<div id="mapArea">
+  <select id="mapSelect"></select>
 </div>
 
-<div id="mapSearch" class="hidden">
-<br>
-海域:
-<select id="map"></select>
-<br><br>
-<button onclick="searchMap()">検索</button>
+<div id="shipArea" style="display:none">
+  <select id="shipSelect"></select>
 </div>
 
-</div>
-
-<div id="shipInfo"></div>
-
-<div class="panel">
-<h3>検索結果</h3>
-<div id="results">データ読み込み中...</div>
-</div>
+<div id="result"></div>
 
 </div>
 
 <script>
+let DATA;
+const result = document.getElementById("result");
+const mode = document.getElementById("mode");
+const mapSelect = document.getElementById("mapSelect");
+const shipSelect = document.getElementById("shipSelect");
+const mapArea = document.getElementById("mapArea");
+const shipArea = document.getElementById("shipArea");
 
-let database={};
-let shipIndex=[];
-let mapIndex={};
-
-const results=document.getElementById("results");
-
-/* ---------- JSON読み込み ---------- */
-
-async function loadDB(){
-results.innerHTML="データ読み込み中...";
-
-const res=await fetch("./data.json");
-database=await res.json();
-
-/* インデックス作成（ここが超重要：先に軽量化） */
-
-for(const ship in database){
-
-shipIndex.push(ship);
-
-const data=database[ship];
-
-for(const key in data){
-if(key==="type"||key==="modify") continue;
-
-if(!mapIndex[key]) mapIndex[key]=[];
-mapIndex[key].push(ship);
-}
-
-}
-
-initUI();
-results.innerHTML="準備完了";
-}
-
-loadDB();
-
-/* ---------- UI初期化 ---------- */
-
-function initUI(){
-
-/* 艦種 */
-const typeSelect=document.getElementById("type");
-const types=new Set();
-shipIndex.forEach(s=>types.add(database[s].type));
-typeSelect.innerHTML='<option value="">指定なし</option>';
-types.forEach(t=>typeSelect.innerHTML+=`<option>${t}</option>`);
-
-/* 艦名 */
-const shipSelect=document.getElementById("ship");
-function updateShips(){
-shipSelect.innerHTML='<option value="">選択してください</option>';
-shipIndex.forEach(s=>{
-if(!typeSelect.value||database[s].type===typeSelect.value)
-shipSelect.innerHTML+=`<option>${s}</option>`;
-});
-}
-typeSelect.onchange=updateShips;
-updateShips();
-
-/* 海域 */
-const mapSelect=document.getElementById("map");
-mapSelect.innerHTML='<option value="">選択してください</option>';
-Object.keys(mapIndex).sort().forEach(m=>{
-mapSelect.innerHTML+=`<option>${m}</option>`;
+fetch("data.json")
+.then(r=>r.json())
+.then(json=>{
+    DATA=json;
+    buildLists();
 });
 
+function buildLists(){
+
+    // --- 海域一覧生成 ---
+    const maps = new Set();
+    const ships = new Set();
+
+    for(const ship in DATA){
+        ships.add(ship);
+        for(const d of DATA[ship]){
+            maps.add(d.map);
+        }
+    }
+
+    mapSelect.innerHTML="";
+    [...maps].sort().forEach(m=>{
+        mapSelect.innerHTML += `<option>${m}</option>`;
+    });
+
+    shipSelect.innerHTML="";
+    [...ships].sort().forEach(s=>{
+        shipSelect.innerHTML += `<option>${s}</option>`;
+    });
+
+    update();
 }
 
-/* ---------- 艦検索（分割描画） ---------- */
+mode.onchange=()=>{
+    if(mode.value==="map"){
+        mapArea.style.display="block";
+        shipArea.style.display="none";
+    }else{
+        mapArea.style.display="none";
+        shipArea.style.display="block";
+    }
+    update();
+};
 
-async function searchShip(){
+mapSelect.onchange=update;
+shipSelect.onchange=update;
 
-const ship=document.getElementById("ship").value;
-if(!ship) return;
+function update(){
+    result.innerHTML="";
 
-document.getElementById("shipInfo").innerHTML="";
-results.innerHTML="検索中...";
-
-await new Promise(r=>setTimeout(r,50));
-
-const shipData=database[ship];
-
-/* 改造情報 */
-let html="<div class='shipInfo'><b>"+ship+"</b><br>改造:<br>";
-if(shipData.modify){
-for(const m in shipData.modify)
-html+=`${m} Lv${shipData.modify[m]}<br>`;
-}
-html+="</div>";
-document.getElementById("shipInfo").innerHTML=html;
-
-/* 分割描画 */
-let buffer="";
-let count=0;
-
-for(const area in shipData){
-
-if(area==="type"||area==="modify") continue;
-
-const nodes=shipData[area];
-
-for(const node in nodes){
-
-const d=nodes[node];
-
-buffer+=`
-<div class="result">
-<b>${area}</b> - マス ${node}<br>
-勝利:${d.get_rank.join(",")}<br>
-提督Lv:${d.level[0]}〜${d.level[1]}
-</div>`;
-
-count++;
-
-/* 20件ごとに描画（これがフリーズ防止） */
-if(count%20===0){
-results.innerHTML+=buffer;
-buffer="";
-await new Promise(r=>setTimeout(r,0));
+    if(mode.value==="map"){
+        showMap();
+    }else{
+        showShip();
+    }
 }
 
+function showMap(){
+    const selected=mapSelect.value;
+
+    // map → node → ship 構造にまとめる
+    const structure={};
+
+    for(const ship in DATA){
+        for(const d of DATA[ship]){
+            if(d.map!==selected) continue;
+
+            if(!structure[d.node]) structure[d.node]=[];
+            structure[d.node].push({ship:ship,data:d});
+        }
+    }
+
+    for(const node in structure){
+        result.innerHTML+=`<div class="map">${selected}</div>`;
+        result.innerHTML+=`<div class="node">${node}マス</div>`;
+
+        for(const obj of structure[node]){
+            const d=obj.data;
+            result.innerHTML+=`
+            <div class="drop">
+            ${obj.ship}
+            <span class="rank">[${d.rank}]</span>
+            <span class="level">Lv${d.level_min}~${d.level_max}</span>
+            </div>`;
+        }
+    }
 }
 
+function showShip(){
+    const selected=shipSelect.value;
+
+    const drops=DATA[selected];
+    if(!drops) return;
+
+    let currentMap="";
+
+    for(const d of drops){
+
+        if(currentMap!==d.map){
+            currentMap=d.map;
+            result.innerHTML+=`<div class="map">${d.map}</div>`;
+        }
+
+        result.innerHTML+=`
+        <div class="drop">
+        ${d.node}マス
+        <span class="rank">[${d.rank}]</span>
+        <span class="level">Lv${d.level_min}~${d.level_max}</span>
+        </div>`;
+    }
 }
-
-results.innerHTML+=buffer;
-
-}
-
-/* ---------- 海域検索（高速化版） ---------- */
-
-async function searchMap(){
-
-const map=document.getElementById("map").value;
-if(!map) return;
-
-document.getElementById("shipInfo").innerHTML="";
-results.innerHTML="検索中...";
-
-await new Promise(r=>setTimeout(r,50));
-
-let buffer="";
-let count=0;
-
-const ships=mapIndex[map]||[];
-
-for(const ship of ships){
-
-const nodes=database[ship][map];
-
-for(const node in nodes){
-
-const d=nodes[node];
-
-buffer+=`
-<div class="result">
-<b>${ship}</b> - マス ${node}<br>
-勝利:${d.get_rank.join(",")}<br>
-提督Lv:${d.level[0]}〜${d.level[1]}
-</div>`;
-
-count++;
-
-if(count%20===0){
-results.innerHTML+=buffer;
-buffer="";
-await new Promise(r=>setTimeout(r,0));
-}
-
-}
-
-}
-
-results.innerHTML+=buffer;
-
-}
-
 </script>
 
 </body>
