@@ -11,10 +11,31 @@ header{background:#1e293b;padding:14px;font-size:22px;font-weight:bold;}
 .container{padding:15px;}
 .panel{background:#1e293b;padding:15px;margin-bottom:15px;border-radius:12px;}
 select{padding:8px;margin:5px;border-radius:8px;border:none;}
-button{padding:10px 16px;background:#38bdf8;border:none;border-radius:8px;cursor:pointer;font-weight:bold;}
-.result{background:#020617;padding:12px;margin-top:10px;border-radius:10px;border-left:5px solid #38bdf8;}
-.detail{margin-top:8px;background:#0b1220;padding:8px;border-radius:8px;}
-.mode{margin-bottom:10px;}
+button{padding:8px 14px;background:#38bdf8;border:none;border-radius:8px;cursor:pointer;font-weight:bold;}
+
+.shipInfo{
+background:#020617;
+padding:12px;
+border-radius:12px;
+margin-bottom:15px;
+border-left:5px solid #22c55e;
+}
+
+.result{
+background:#020617;
+padding:12px;
+margin-top:10px;
+border-radius:10px;
+cursor:pointer;
+}
+
+.detail{
+display:none;
+margin-top:8px;
+background:#0b1220;
+padding:8px;
+border-radius:8px;
+}
 .hidden{display:none;}
 </style>
 
@@ -28,26 +49,20 @@ button{padding:10px 16px;background:#38bdf8;border:none;border-radius:8px;cursor
 
 <div class="panel">
 
-<h3>検索モード</h3>
-
-<div class="mode">
-<label><input type="radio" name="mode" value="ship" checked onchange="switchMode()"> 艦から探す</label>
-<label style="margin-left:20px;"><input type="radio" name="mode" value="map" onchange="switchMode()"> 海域から探す</label>
-</div>
-
-<!-- 艦検索 -->
+<label><input type="radio" name="mode" value="ship" checked onchange="switchMode()"> 艦から探す</label> <label style="margin-left:20px;"><input type="radio" name="mode" value="map" onchange="switchMode()"> 海域から探す</label>
 
 <div id="shipSearch">
+<br>
 艦種:
 <select id="type"></select>
-
-艦名: <select id="ship"></select> <br><br> <button onclick="searchShip()">検索</button>
-
+艦名:
+<select id="ship"></select>
+<br><br>
+<button onclick="searchShip()">検索</button>
 </div>
 
-<!-- 海域検索 -->
-
 <div id="mapSearch" class="hidden">
+<br>
 海域:
 <select id="map"></select>
 <br><br>
@@ -55,6 +70,8 @@ button{padding:10px 16px;background:#38bdf8;border:none;border-radius:8px;cursor
 </div>
 
 </div>
+
+<div id="shipInfo"></div>
 
 <div class="panel">
 <h3>検索結果</h3>
@@ -78,6 +95,7 @@ function switchMode(){
 const mode=document.querySelector('input[name="mode"]:checked').value;
 document.getElementById("shipSearch").classList.toggle("hidden",mode!=="ship");
 document.getElementById("mapSearch").classList.toggle("hidden",mode!=="map");
+document.getElementById("shipInfo").innerHTML="";
 document.getElementById("results").innerHTML="";
 }
 
@@ -107,7 +125,8 @@ const mapSelect=document.getElementById("map");
 const maps=new Set();
 for(const ship in database){
 for(const key in database[ship]){
-if(key!=="type") maps.add(key);
+if(key==="type"||key==="modify") continue;
+maps.add(key);
 }
 }
 mapSelect.innerHTML='<option value="">選択してください</option>';
@@ -118,29 +137,50 @@ document.getElementById("results").innerHTML="準備完了";
 
 /* 艦検索 */
 function searchShip(){
-const ship=document.getElementById("ship").value;
-const results=document.getElementById("results");
 
-if(!ship){results.innerHTML="艦を選択してください";return;}
+const ship=document.getElementById("ship").value;
+if(!ship) return;
+
+const shipData=database[ship];
+const infoBox=document.getElementById("shipInfo");
+const results=document.getElementById("results");
 
 results.innerHTML="";
 
-const shipData=database[ship];
+/* 改造情報表示 */
+let modifyHTML="<div class='shipInfo'><b>"+ship+"</b><br>改造レベル:<br>";
+
+if(shipData.modify){
+for(const m in shipData.modify){
+modifyHTML+=m+" : Lv"+shipData.modify[m]+"<br>";
+}
+}else{
+modifyHTML+="改造なし";
+}
+
+modifyHTML+="</div>";
+infoBox.innerHTML=modifyHTML;
+
+/* ドロップ一覧 */
+let id=0;
 
 for(const area in shipData){
-if(area==="type") continue;
+if(area==="type"||area==="modify") continue;
 
 const nodes=shipData[area];
 
 for(const node in nodes){
 
-const info=nodes[node];
+const d=nodes[node];
+id++;
 
 results.innerHTML+=`
-<div class="result">
-<b>${area}</b> - マス ${node}<br>
-勝利: ${info.get_rank.join(",")}<br>
-提督Lv: ${info.level[0]}〜${info.level[1]}
+<div class="result" onclick="toggle('d${id}')">
+<b>${area}</b> - マス ${node}
+<div id="d${id}" class="detail">
+勝利: ${d.get_rank.join(",")}<br>
+提督Lv: ${d.level[0]}〜${d.level[1]}
+</div>
 </div>`;
 }
 }
@@ -150,33 +190,41 @@ results.innerHTML+=`
 function searchMap(){
 
 const map=document.getElementById("map").value;
+if(!map) return;
+
+document.getElementById("shipInfo").innerHTML="";
 const results=document.getElementById("results");
-
-if(!map){results.innerHTML="海域を選択してください";return;}
-
 results.innerHTML="";
+
+let id=0;
 
 for(const ship in database){
 
 const shipData=database[ship];
-
 if(!shipData[map]) continue;
 
 const nodes=shipData[map];
 
 for(const node in nodes){
 
-const info=nodes[node];
+const d=nodes[node];
+id++;
 
 results.innerHTML+=`
-<div class="result">
-<b>${ship}</b><br>
-マス ${node}<br>
-勝利: ${info.get_rank.join(",")}<br>
-提督Lv: ${info.level[0]}〜${info.level[1]}
+<div class="result" onclick="toggle('d${id}')">
+<b>${ship}</b> - マス ${node}
+<div id="d${id}" class="detail">
+勝利: ${d.get_rank.join(",")}<br>
+提督Lv: ${d.level[0]}〜${d.level[1]}
+</div>
 </div>`;
 }
 }
+}
+
+function toggle(id){
+const e=document.getElementById(id);
+e.style.display=e.style.display==="block"?"none":"block";
 }
 
 </script>
