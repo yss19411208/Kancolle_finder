@@ -12,16 +12,16 @@ header{background:#22324d;color:#fff;padding:14px 16px;font-size:20px;text-align
 .mode label{background:#fff;border-radius:999px;padding:8px 14px;box-shadow:0 1px 3px rgba(0,0,0,.15);cursor:pointer}
 .mode input{margin-right:6px}
 select{width:100%;padding:10px;border-radius:10px;border:1px solid #cfd6e4;margin:10px 0 14px 0;font-size:15px}
-.card{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:12px;margin:10px 0}
-.mapTitle{font-size:20px;font-weight:700;margin:10px 0}
+.card{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:16px;margin:14px 0}
+.mapTitle{font-size:22px;font-weight:700;margin:10px 0}
 .nodeTitle{font-weight:700;color:#1f3a5f;margin:8px 0 4px 10px}
 .drop{margin-left:20px;padding:6px 0;border-bottom:1px solid #eef1f6}
 .rank{color:#c0392b;font-weight:700;margin-left:6px}
 .level{color:#1e7acb;margin-left:6px}
 .badge{background:#e8eef9;border-radius:8px;padding:2px 6px;margin-left:6px;font-size:12px}
 .notice{color:#56627a;margin:6px 0 12px 0}
-.modifyBtn{margin-top:8px;background:#eef3ff;border:1px solid #c8d6ff;border-radius:10px;padding:6px 10px;cursor:pointer}
-.modify{display:none;margin-top:8px;padding-left:8px}
+.mapImage{width:100%;max-width:600px;height:auto;border-radius:12px;margin:10px 0;box-shadow:0 2px 6px rgba(0,0,0,.15)}
+.modifyBox{background:#f0f4ff;border:1px solid #c8d6ff;border-radius:10px;padding:10px;margin:10px 0}
 </style>
 </head>
 <body>
@@ -47,8 +47,8 @@ select{width:100%;padding:10px;border-radius:10px;border:1px solid #cfd6e4;margi
 
 <script>
 let RAW = null;
-let mapIndex = {}; // map -> node -> [{ship, ranks, level_min, level_max, type}]
-let shipIndex = {}; // ship -> [{map,node,ranks,level_min,level_max,type}]
+let mapIndex = {};
+let shipIndex = {};
 
 const result = document.getElementById('result');
 const mapSelect = document.getElementById('mapSelect');
@@ -56,7 +56,6 @@ const shipSelect = document.getElementById('shipSelect');
 const mapArea = document.getElementById('mapArea');
 const shipArea = document.getElementById('shipArea');
 
-// --- utility: map sort like 1-1,1-2,...,2-1 ---
 function mapSort(a,b){
   const pa=a.split('-').map(Number);
   const pb=b.split('-').map(Number);
@@ -64,48 +63,29 @@ function mapSort(a,b){
   return pa[1]-pb[1];
 }
 
-// --- load ---
 fetch('data.json', {cache:'no-store'})
-  .then(r=>{
-    if(!r.ok) throw new Error('data.json を取得できません: '+r.status);
-    return r.json();
-  })
+  .then(r=>r.json())
   .then(json=>{
-    RAW = json;
+    RAW=json;
     preprocess();
     buildLists();
     update();
-  })
-  .catch(e=>{
-    result.innerHTML = '<div class="card">読み込み失敗: '+e.message+'</div>';
   });
 
-// --- preprocess nested json to fast indexes ---
 function preprocess(){
-  mapIndex = {};
-  shipIndex = {};
-
-  for(const [ship, body] of Object.entries(RAW)){
-    const type = body.type || '';
-    shipIndex[ship] = [];
-
-    for(const [key, val] of Object.entries(body)){
-      if(key==='type' || key==='modify') continue; // maps only
-      const map = key; // e.g., "1-1"
-      const nodes = val; // {A:{level:[..],get_rank:[..]}, ...}
-
-      if(!mapIndex[map]) mapIndex[map] = {};
-
-      for(const [node, cond] of Object.entries(nodes)){
-        const level_min = Array.isArray(cond.level)? cond.level[0] : '';
-        const level_max = Array.isArray(cond.level)? cond.level[1] : '';
-        const ranks = Array.isArray(cond.get_rank)? cond.get_rank.join('/') : '';
-
-        // ship index
+  mapIndex={}; shipIndex={};
+  for(const [ship,body] of Object.entries(RAW)){
+    const type=body.type||'';
+    shipIndex[ship]=[];
+    for(const [map,nodes] of Object.entries(body)){
+      if(map==='type'||map==='modify') continue;
+      if(!mapIndex[map]) mapIndex[map]={};
+      for(const [node,cond] of Object.entries(nodes)){
+        const level_min=cond.level?.[0]??'';
+        const level_max=cond.level?.[1]??'';
+        const ranks=(cond.get_rank||[]).join('/');
         shipIndex[ship].push({map,node,ranks,level_min,level_max,type});
-
-        // map index
-        if(!mapIndex[map][node]) mapIndex[map][node] = [];
+        if(!mapIndex[map][node]) mapIndex[map][node]=[];
         mapIndex[map][node].push({ship,ranks,level_min,level_max,type});
       }
     }
@@ -113,27 +93,21 @@ function preprocess(){
 }
 
 function buildLists(){
-  // maps
   mapSelect.innerHTML='';
   Object.keys(mapIndex).sort(mapSort).forEach(m=>{
-    const op=document.createElement('option');
-    op.value=m; op.textContent=m; mapSelect.appendChild(op);
+    const op=document.createElement('option'); op.value=m; op.textContent=m; mapSelect.appendChild(op);
   });
-
-  // ships
   shipSelect.innerHTML='';
   Object.keys(shipIndex).sort((a,b)=>a.localeCompare(b,'ja')).forEach(s=>{
-    const op=document.createElement('option');
-    op.value=s; op.textContent=s; shipSelect.appendChild(op);
+    const op=document.createElement('option'); op.value=s; op.textContent=s; shipSelect.appendChild(op);
   });
 }
 
-// mode switch
 for(const r of document.querySelectorAll('input[name="mode"]')){
   r.addEventListener('change',()=>{
     const v=document.querySelector('input[name="mode"]:checked').value;
-    if(v==='map'){ mapArea.style.display='block'; shipArea.style.display='none'; }
-    else{ mapArea.style.display='none'; shipArea.style.display='block'; }
+    if(v==='map'){mapArea.style.display='block';shipArea.style.display='none';}
+    else{mapArea.style.display='none';shipArea.style.display='block';}
     update();
   });
 }
@@ -147,52 +121,44 @@ function update(){
 }
 
 function showMap(){
-  const selected = mapSelect.value;
-  const nodes = mapIndex[selected];
+  const selected=mapSelect.value;
+  const nodes=mapIndex[selected];
   if(!nodes) return;
-
-  let html = `<div class="card"><div class="mapTitle">${selected}</div>`;
-  const nodeKeys = Object.keys(nodes).sort();
-  for(const node of nodeKeys){
-    html += `<div class="nodeTitle">${node}マス</div>`;
+  let html=`<div class="card"><div class="mapTitle">${selected}</div>`;
+  html+=`<img class="mapImage" src="image/${selected}.png" onerror="this.style.display='none'">`;
+  for(const node of Object.keys(nodes).sort()){
+    html+=`<div class="nodeTitle">${node}マス</div>`;
     for(const d of nodes[node].sort((a,b)=>a.ship.localeCompare(b.ship,'ja'))){
-      html += `<div class="drop">${d.ship}<span class="badge">${d.type}</span><span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
+      html+=`<div class="drop">${d.ship}<span class="badge">${d.type}</span><span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
     }
   }
-  html += '</div>';
-  result.innerHTML = html;
+  html+='</div>';
+  result.innerHTML=html;
 }
 
 function showShip(){
-  const ship = shipSelect.value;
-  const drops = shipIndex[ship];
+  const ship=shipSelect.value;
+  const drops=shipIndex[ship];
   if(!drops) return;
-
-  // group by map
   const byMap={};
-  for(const d of drops){ if(!byMap[d.map]) byMap[d.map]=[]; byMap[d.map].push(d); }
-
-  let html = `<div class="card"><div class="mapTitle">${ship}</div>`;
-
-  // modify section
-  const modify = RAW[ship].modify;
-  if(modify){
-    html += `<button class="modifyBtn" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">改装（クリックで表示）</button>`;
-    html += '<div class="modify">';
-    for(const [k,v] of Object.entries(modify)){
-      html += `<div>${k} : Lv${v}</div>`;
+  for(const d of drops){if(!byMap[d.map]) byMap[d.map]=[]; byMap[d.map].push(d);}  
+  let html=`<div class="card"><div class="mapTitle">${ship}</div>`;
+  if(RAW[ship].modify){
+    html+='<div class="modifyBox"><strong>改造情報</strong>';
+    for(const [k,v] of Object.entries(RAW[ship].modify)){
+      html+=`<div>${k} : Lv${v}</div>`;
     }
-    html += '</div>';
+    html+='</div>';
   }
-
   Object.keys(byMap).sort(mapSort).forEach(map=>{
-    html += `<div class="mapTitle">${map}</div>`;
+    html+=`<div class="mapTitle">${map}</div>`;
+    html+=`<img class="mapImage" src="image/${map}.png" onerror="this.style.display='none'">`;
     for(const d of byMap[map].sort((a,b)=>a.node.localeCompare(b.node))){
-      html += `<div class="drop">${d.node}マス <span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
+      html+=`<div class="drop">${d.node}マス <span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
     }
   });
-  html += '</div>';
-  result.innerHTML = html;
+  html+='</div>';
+  result.innerHTML=html;
 }
 </script>
 </body>
