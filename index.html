@@ -1,206 +1,199 @@
 <!DOCTYPE html>
-
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>艦これドロップ検索</title>
-
 <style>
-body{
-    font-family: "Segoe UI",sans-serif;
-    background:#f2f4f7;
-    margin:0;
-}
-header{
-    background:#2b3a55;
-    color:white;
-    padding:15px;
-    font-size:22px;
-    text-align:center;
-}
-.container{
-    padding:20px;
-    max-width:1000px;
-    margin:auto;
-}
-select{
-    padding:8px;
-    font-size:16px;
-    margin:5px 0 15px 0;
-    width:100%;
-}
-.card{
-    background:white;
-    border-radius:10px;
-    padding:12px;
-    margin:10px 0;
-    box-shadow:0 2px 6px rgba(0,0,0,0.15);
-}
-.map{
-    font-size:20px;
-    font-weight:bold;
-    margin-top:15px;
-}
-.node{
-    margin-left:15px;
-    margin-top:8px;
-    font-weight:bold;
-    color:#2b3a55;
-}
-.drop{
-    margin-left:30px;
-    padding:4px 0;
-    border-bottom:1px solid #eee;
-}
-.rank{ color:#c0392b; font-weight:bold; }
-.level{ color:#2980b9; }
+body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f3f5f8;margin:0}
+header{background:#22324d;color:#fff;padding:14px 16px;font-size:20px;text-align:center}
+.container{max-width:1100px;margin:0 auto;padding:16px}
+.mode{display:flex;gap:16px;align-items:center;margin-bottom:10px}
+.mode label{background:#fff;border-radius:999px;padding:8px 14px;box-shadow:0 1px 3px rgba(0,0,0,.15);cursor:pointer}
+.mode input{margin-right:6px}
+select{width:100%;padding:10px;border-radius:10px;border:1px solid #cfd6e4;margin:10px 0 14px 0;font-size:15px}
+.card{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:12px;margin:10px 0}
+.mapTitle{font-size:20px;font-weight:700;margin:10px 0}
+.nodeTitle{font-weight:700;color:#1f3a5f;margin:8px 0 4px 10px}
+.drop{margin-left:20px;padding:6px 0;border-bottom:1px solid #eef1f6}
+.rank{color:#c0392b;font-weight:700;margin-left:6px}
+.level{color:#1e7acb;margin-left:6px}
+.badge{background:#e8eef9;border-radius:8px;padding:2px 6px;margin-left:6px;font-size:12px}
+.notice{color:#56627a;margin:6px 0 12px 0}
+.modifyBtn{margin-top:8px;background:#eef3ff;border:1px solid #c8d6ff;border-radius:10px;padding:6px 10px;cursor:pointer}
+.modify{display:none;margin-top:8px;padding-left:8px}
 </style>
-
 </head>
-
 <body>
 <header>艦これ ドロップ検索</header>
-
 <div class="container">
+  <div class="mode">
+    <label><input type="radio" name="mode" value="map" checked> 海域から探す</label>
+    <label><input type="radio" name="mode" value="ship"> 艦から探す</label>
+  </div>
 
-<select id="mode">
-  <option value="map">海域から探す</option>
-  <option value="ship">艦から探す</option>
-</select>
+  <div id="mapArea">
+    <div class="notice">海域を選択すると、マスごとにドロップ艦と条件が表示されます。</div>
+    <select id="mapSelect"></select>
+  </div>
 
-<div id="mapArea">
-  <select id="mapSelect"></select>
-</div>
+  <div id="shipArea" style="display:none">
+    <div class="notice">艦を選択すると、その艦がドロップする海域とマス・条件が表示されます。</div>
+    <select id="shipSelect"></select>
+  </div>
 
-<div id="shipArea" style="display:none">
-  <select id="shipSelect"></select>
-</div>
-
-<div id="result"></div>
-
+  <div id="result"></div>
 </div>
 
 <script>
-let DATA;
-const result = document.getElementById("result");
-const mode = document.getElementById("mode");
-const mapSelect = document.getElementById("mapSelect");
-const shipSelect = document.getElementById("shipSelect");
-const mapArea = document.getElementById("mapArea");
-const shipArea = document.getElementById("shipArea");
+let RAW = null;
+let mapIndex = {}; // map -> node -> [{ship, ranks, level_min, level_max, type}]
+let shipIndex = {}; // ship -> [{map,node,ranks,level_min,level_max,type}]
 
-fetch("data.json")
-.then(r=>r.json())
-.then(json=>{
-    DATA=json;
-    buildLists();
-});
+const result = document.getElementById('result');
+const mapSelect = document.getElementById('mapSelect');
+const shipSelect = document.getElementById('shipSelect');
+const mapArea = document.getElementById('mapArea');
+const shipArea = document.getElementById('shipArea');
 
-function buildLists(){
-
-    // --- 海域一覧生成 ---
-    const maps = new Set();
-    const ships = new Set();
-
-    for(const ship in DATA){
-        ships.add(ship);
-        for(const d of DATA[ship]){
-            maps.add(d.map);
-        }
-    }
-
-    mapSelect.innerHTML="";
-    [...maps].sort().forEach(m=>{
-        mapSelect.innerHTML += `<option>${m}</option>`;
-    });
-
-    shipSelect.innerHTML="";
-    [...ships].sort().forEach(s=>{
-        shipSelect.innerHTML += `<option>${s}</option>`;
-    });
-
-    update();
+// --- utility: map sort like 1-1,1-2,...,2-1 ---
+function mapSort(a,b){
+  const pa=a.split('-').map(Number);
+  const pb=b.split('-').map(Number);
+  if(pa[0]!==pb[0]) return pa[0]-pb[0];
+  return pa[1]-pb[1];
 }
 
-mode.onchange=()=>{
-    if(mode.value==="map"){
-        mapArea.style.display="block";
-        shipArea.style.display="none";
-    }else{
-        mapArea.style.display="none";
-        shipArea.style.display="block";
-    }
+// --- load ---
+fetch('data.json', {cache:'no-store'})
+  .then(r=>{
+    if(!r.ok) throw new Error('data.json を取得できません: '+r.status);
+    return r.json();
+  })
+  .then(json=>{
+    RAW = json;
+    preprocess();
+    buildLists();
     update();
-};
+  })
+  .catch(e=>{
+    result.innerHTML = '<div class="card">読み込み失敗: '+e.message+'</div>';
+  });
 
+// --- preprocess nested json to fast indexes ---
+function preprocess(){
+  mapIndex = {};
+  shipIndex = {};
+
+  for(const [ship, body] of Object.entries(RAW)){
+    const type = body.type || '';
+    shipIndex[ship] = [];
+
+    for(const [key, val] of Object.entries(body)){
+      if(key==='type' || key==='modify') continue; // maps only
+      const map = key; // e.g., "1-1"
+      const nodes = val; // {A:{level:[..],get_rank:[..]}, ...}
+
+      if(!mapIndex[map]) mapIndex[map] = {};
+
+      for(const [node, cond] of Object.entries(nodes)){
+        const level_min = Array.isArray(cond.level)? cond.level[0] : '';
+        const level_max = Array.isArray(cond.level)? cond.level[1] : '';
+        const ranks = Array.isArray(cond.get_rank)? cond.get_rank.join('/') : '';
+
+        // ship index
+        shipIndex[ship].push({map,node,ranks,level_min,level_max,type});
+
+        // map index
+        if(!mapIndex[map][node]) mapIndex[map][node] = [];
+        mapIndex[map][node].push({ship,ranks,level_min,level_max,type});
+      }
+    }
+  }
+}
+
+function buildLists(){
+  // maps
+  mapSelect.innerHTML='';
+  Object.keys(mapIndex).sort(mapSort).forEach(m=>{
+    const op=document.createElement('option');
+    op.value=m; op.textContent=m; mapSelect.appendChild(op);
+  });
+
+  // ships
+  shipSelect.innerHTML='';
+  Object.keys(shipIndex).sort((a,b)=>a.localeCompare(b,'ja')).forEach(s=>{
+    const op=document.createElement('option');
+    op.value=s; op.textContent=s; shipSelect.appendChild(op);
+  });
+}
+
+// mode switch
+for(const r of document.querySelectorAll('input[name="mode"]')){
+  r.addEventListener('change',()=>{
+    const v=document.querySelector('input[name="mode"]:checked').value;
+    if(v==='map'){ mapArea.style.display='block'; shipArea.style.display='none'; }
+    else{ mapArea.style.display='none'; shipArea.style.display='block'; }
+    update();
+  });
+}
 mapSelect.onchange=update;
 shipSelect.onchange=update;
 
 function update(){
-    result.innerHTML="";
-
-    if(mode.value==="map"){
-        showMap();
-    }else{
-        showShip();
-    }
+  result.innerHTML='';
+  const mode=document.querySelector('input[name="mode"]:checked').value;
+  if(mode==='map') showMap(); else showShip();
 }
 
 function showMap(){
-    const selected=mapSelect.value;
+  const selected = mapSelect.value;
+  const nodes = mapIndex[selected];
+  if(!nodes) return;
 
-    // map → node → ship 構造にまとめる
-    const structure={};
-
-    for(const ship in DATA){
-        for(const d of DATA[ship]){
-            if(d.map!==selected) continue;
-
-            if(!structure[d.node]) structure[d.node]=[];
-            structure[d.node].push({ship:ship,data:d});
-        }
+  let html = `<div class="card"><div class="mapTitle">${selected}</div>`;
+  const nodeKeys = Object.keys(nodes).sort();
+  for(const node of nodeKeys){
+    html += `<div class="nodeTitle">${node}マス</div>`;
+    for(const d of nodes[node].sort((a,b)=>a.ship.localeCompare(b.ship,'ja'))){
+      html += `<div class="drop">${d.ship}<span class="badge">${d.type}</span><span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
     }
-
-    for(const node in structure){
-        result.innerHTML+=`<div class="map">${selected}</div>`;
-        result.innerHTML+=`<div class="node">${node}マス</div>`;
-
-        for(const obj of structure[node]){
-            const d=obj.data;
-            result.innerHTML+=`
-            <div class="drop">
-            ${obj.ship}
-            <span class="rank">[${d.rank}]</span>
-            <span class="level">Lv${d.level_min}~${d.level_max}</span>
-            </div>`;
-        }
-    }
+  }
+  html += '</div>';
+  result.innerHTML = html;
 }
 
 function showShip(){
-    const selected=shipSelect.value;
+  const ship = shipSelect.value;
+  const drops = shipIndex[ship];
+  if(!drops) return;
 
-    const drops=DATA[selected];
-    if(!drops) return;
+  // group by map
+  const byMap={};
+  for(const d of drops){ if(!byMap[d.map]) byMap[d.map]=[]; byMap[d.map].push(d); }
 
-    let currentMap="";
+  let html = `<div class="card"><div class="mapTitle">${ship}</div>`;
 
-    for(const d of drops){
-
-        if(currentMap!==d.map){
-            currentMap=d.map;
-            result.innerHTML+=`<div class="map">${d.map}</div>`;
-        }
-
-        result.innerHTML+=`
-        <div class="drop">
-        ${d.node}マス
-        <span class="rank">[${d.rank}]</span>
-        <span class="level">Lv${d.level_min}~${d.level_max}</span>
-        </div>`;
+  // modify section
+  const modify = RAW[ship].modify;
+  if(modify){
+    html += `<button class="modifyBtn" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='block'?'none':'block'">改装（クリックで表示）</button>`;
+    html += '<div class="modify">';
+    for(const [k,v] of Object.entries(modify)){
+      html += `<div>${k} : Lv${v}</div>`;
     }
+    html += '</div>';
+  }
+
+  Object.keys(byMap).sort(mapSort).forEach(map=>{
+    html += `<div class="mapTitle">${map}</div>`;
+    for(const d of byMap[map].sort((a,b)=>a.node.localeCompare(b.node))){
+      html += `<div class="drop">${d.node}マス <span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
+    }
+  });
+  html += '</div>';
+  result.innerHTML = html;
 }
 </script>
-
 </body>
 </html>
