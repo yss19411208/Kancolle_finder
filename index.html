@@ -341,34 +341,6 @@
     background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px; color: #555; font-size: 11px;
   }
 
-  /* 艦名モード：2カラムレイアウト */
-  .ship-detail-layout {
-    display: flex;
-    gap: 0;
-    align-items: flex-start;
-  }
-  .ship-detail-left {
-    flex: 1;
-    min-width: 0;
-    border-right: 1px solid var(--border);
-  }
-  .ship-detail-right {
-    width: 340px;
-    flex-shrink: 0;
-  }
-  .ship-detail-right .build-section-title {
-    background: #fef8ee;
-    border-bottom: 1px solid #f0d890;
-    padding: 8px 14px;
-    font-size: 12px; font-weight: 700; color: #8a5c00;
-    letter-spacing: .06em;
-  }
-  @media (max-width: 700px) {
-    .ship-detail-layout { flex-direction: column; }
-    .ship-detail-right { width: 100%; border-top: 2px solid #f0e8c0; }
-    .ship-detail-left { border-right: none; }
-  }
-
   /* ===== 艦娘詳細モーダル ===== */
   #shipModal {
    display: none;
@@ -426,6 +398,21 @@
 
   .modal-pane { display: none; max-height: 75vh; overflow-y: auto; }
   .modal-pane.active { display: block; }
+  /* 艦名モード タブ */
+  .ship-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: #f8f9fc;
+  }
+  .ship-tab {
+    padding: 8px 18px;
+    font-size: 12px; font-weight: 700; color: var(--text-sub);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all .15s; user-select: none;
+  }
+  .ship-tab.active { color: var(--navy); border-bottom-color: var(--blue); background: #fff; }
+  .ship-tab:hover:not(.active) { background: var(--blue-light); }
+
 
   /* 画像モーダル */
   #imgModal {
@@ -723,12 +710,24 @@ function switchModalTab(tab) {
   $('modalBuildPane').classList.toggle('active', tab === 'build');
 }
 
-// ===== 艦名モード（ページ内 2カラム表示） =====
+// ===== 艦名モード（ページ内 タブ表示） =====
+let shipTabState = 'drop'; // 'drop' | 'build'
+
 function showShip() {
   const ship = $('shipSelect').value;
   if (!ship || !RAW[ship]) return;
-  const body = RAW[ship];
-  const drops = shipDropIndex[ship];
+  renderShipDetail(ship, shipTabState);
+}
+
+function switchShipTab(tab) {
+  shipTabState = tab;
+  const ship = $('shipSelect').value;
+  if (ship) renderShipDetail(ship, tab);
+}
+
+function renderShipDetail(ship, tab) {
+  const body      = RAW[ship];
+  const drops     = shipDropIndex[ship];
   const buildData = BUILD[ship];
 
   let html = `<div class="card">`;
@@ -747,37 +746,38 @@ function showShip() {
     html += `</div></div>`;
   }
 
-  // 2カラム開始
-  html += `<div class="ship-detail-layout">`;
+  // タブバー
+  html += `<div class="ship-tabs">`;
+  html += `<div class="ship-tab ${tab==='drop'?'active':''}" onclick="switchShipTab('drop')">ドロップ海域</div>`;
+  html += `<div class="ship-tab ${tab==='build'?'active':''}" onclick="switchShipTab('build')">建造レシピ</div>`;
+  html += `</div>`;
 
-  // 左：ドロップ海域
-  html += `<div class="ship-detail-left">`;
-  if (drops && Object.keys(drops).length > 0) {
-    for (const map of Object.keys(drops).sort(mapSort)) {
-      html += `<div class="map-subtitle">${map}</div>`;
-      html += mediaHtml(map, 'sm');
-      for (const node of Object.keys(drops[map]).sort()) {
-        const { ranks, lv } = drops[map][node];
-        html += `<div class="drop-row">`;
-        html += `<span class="ship-name">ノード ${node}</span>`;
-        html += `<div class="ranks">${ranksHtml(ranks)}</div>`;
-        html += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
-        html += `</div>`;
+  // ドロップペイン
+  if (tab === 'drop') {
+    if (drops && Object.keys(drops).length > 0) {
+      for (const map of Object.keys(drops).sort(mapSort)) {
+        html += `<div class="map-subtitle">${map}</div>`;
+        html += mediaHtml(map, 'sm');
+        for (const node of Object.keys(drops[map]).sort()) {
+          const { ranks, lv } = drops[map][node];
+          html += `<div class="drop-row">`;
+          html += `<span class="ship-name">ノード ${node}</span>`;
+          html += `<div class="ranks">${ranksHtml(ranks)}</div>`;
+          html += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
+          html += `</div>`;
+        }
       }
+    } else {
+      html += `<div class="no-data">ドロップデータなし</div>`;
     }
-  } else {
-    html += `<div class="no-data">ドロップデータなし</div>`;
   }
-  html += `</div>`; // ship-detail-left
 
-  // 右：建造レシピ
-  html += `<div class="ship-detail-right">`;
-  html += `<div class="build-section-title">建造レシピ</div>`;
-  html += buildRecipeTable(ship, buildData);
-  html += `</div>`; // ship-detail-right
+  // 建造ペイン
+  if (tab === 'build') {
+    html += buildRecipeTable(ship, buildData);
+  }
 
-  html += `</div>`; // ship-detail-layout
-  html += `</div>`; // card
+  html += `</div>`;
   $('result').innerHTML = html;
 }
 // ===== 建造レシピ ソートテーブル =====
