@@ -135,7 +135,7 @@
   }
   .map-media-img img {
     width: 300px;
-    height: 180px;
+    height: 280px;
     object-fit: cover;
     display: block;
     cursor: pointer;
@@ -143,12 +143,12 @@
   }
   .map-media-img img:hover { opacity: .85; }
   .map-media-img .no-img {
-    width: 300px; height: 180px;
+    width: 300px; height: 280px;
     display: flex; align-items: center; justify-content: center;
     font-size: 12px; color: var(--text-sub);
   }
 
-  /* 右：iframe（残り幅 × 180px高さ） */
+  /* 右：iframe（残り幅 × 280px高さ） */
   .map-media-frame {
     flex: 1;
     min-width: 0;
@@ -156,7 +156,7 @@
   }
   .map-media-frame iframe {
     width: 100%;
-    height: 180px;
+    height: 280px;
     border: none;
     display: block;
   }
@@ -193,13 +193,13 @@
   }
   .map-media-sm .map-media-img img {
     width: 200px;
-    height: 120px;
+    height: 200px;
   }
   .map-media-sm .map-media-img .no-img {
-    width: 200px; height: 120px;
+    width: 200px; height: 200px;
   }
   .map-media-sm .map-media-frame iframe {
-    height: 120px;
+    height: 200px;
   }
 
   /* ノード・艦種 */
@@ -363,7 +363,7 @@
   .modal-tab.active { color: var(--navy); border-bottom-color: var(--blue); background: #fff; }
   .modal-tab:hover:not(.active) { background: var(--blue-light); }
 
-  .modal-pane { display: none; max-height: 65vh; overflow-y: auto; }
+  .modal-pane { display: none; max-height: 75vh; overflow-y: auto; }
   .modal-pane.active { display: block; }
 
   /* 画像モーダル */
@@ -384,7 +384,7 @@
     .map-media-img img { width: 100%; height: auto; }
     .map-media-sm .map-media-img img { width: 100%; height: auto; }
     .map-media-img .no-img, .map-media-sm .map-media-img .no-img { width: 100%; }
-    .map-media-frame iframe { height: 220px; }
+    .map-media-frame iframe { height: 260px; }
     .select-row { flex-direction: column; }
     .level-info { margin-left: 0; }
   }
