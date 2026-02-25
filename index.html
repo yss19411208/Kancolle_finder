@@ -6,61 +6,61 @@
 <title>艦これ ドロップ検索</title>
 <style>
   :root {
-    --bg: #f0f3f8;
-    --surface: #ffffff;
-    --navy: #1e3154;
-    --navy2: #2c4a7a;
-    --blue: #2e6dbb;
-    --blue-light: #e8f0fb;
-    --border: #d0d8e8;
-    --text: #1a2640;
-    --text-sub: #5a6a84;
-    --green: #1a7a3e;
-    --shadow: 0 2px 8px rgba(0,0,0,.1);
-    --shadow-sm: 0 1px 4px rgba(0,0,0,.08);
+   --bg: #f0f3f8;
+   --surface: #ffffff;
+   --navy: #1e3154;
+   --navy2: #2c4a7a;
+   --blue: #2e6dbb;
+   --blue-light: #e8f0fb;
+   --border: #d0d8e8;
+   --text: #1a2640;
+   --text-sub: #5a6a84;
+   --green: #1a7a3e;
+   --shadow: 0 2px 8px rgba(0,0,0,.1);
+   --shadow-sm: 0 1px 4px rgba(0,0,0,.08);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    font-size: 14px;
-    line-height: 1.6;
+   font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+   background: var(--bg);
+   color: var(--text);
+   font-size: 14px;
+   line-height: 1.6;
   }
 
   header {
-    background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
-    color: #fff;
-    padding: 14px 16px;
-    text-align: center;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: .06em;
-    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+   background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+   color: #fff;
+   padding: 14px 16px;
+   text-align: center;
+   font-size: 18px;
+   font-weight: 700;
+   letter-spacing: .06em;
+   box-shadow: 0 2px 8px rgba(0,0,0,.25);
   }
 
   .container {
-    max-width: 960px;
-    margin: 0 auto;
-    padding: 16px 12px 60px;
+   max-width: 960px;
+   margin: 0 auto;
+   padding: 16px 12px 60px;
   }
 
   /* メインモード切替 */
   .mode-tabs {
-    display: flex;
-    background: var(--surface);
-    border-radius: 10px;
-    box-shadow: var(--shadow-sm);
-    overflow: hidden;
-    margin-bottom: 14px;
-    border: 1px solid var(--border);
+   display: flex;
+   background: var(--surface);
+   border-radius: 10px;
+   box-shadow: var(--shadow-sm);
+   overflow: hidden;
+   margin-bottom: 14px;
+   border: 1px solid var(--border);
   }
   .mode-tabs label {
-    flex: 1; text-align: center; padding: 10px 8px;
-    cursor: pointer; font-weight: 600; color: var(--text-sub);
-    transition: all .15s; user-select: none; font-size: 13px;
+   flex: 1; text-align: center; padding: 10px 8px;
+   cursor: pointer; font-weight: 600; color: var(--text-sub);
+   transition: all .15s; user-select: none; font-size: 13px;
   }
   .mode-tabs input { display: none; }
   .mode-tabs input:checked + label { background: var(--navy); color: #fff; }
@@ -69,163 +69,163 @@
 
   /* 検索ボックス */
   .search-box {
-    background: var(--surface);
-    border-radius: 12px;
-    box-shadow: var(--shadow-sm);
-    border: 1px solid var(--border);
-    padding: 14px 16px;
-    margin-bottom: 14px;
+   background: var(--surface);
+   border-radius: 12px;
+   box-shadow: var(--shadow-sm);
+   border: 1px solid var(--border);
+   padding: 14px 16px;
+   margin-bottom: 14px;
   }
   .notice { font-size: 12px; color: var(--text-sub); margin-bottom: 8px; }
 
   .select-row { display: flex; gap: 10px; flex-wrap: wrap; }
   .select-row select {
-    flex: 1; min-width: 130px;
-    padding: 9px 10px; border-radius: 8px;
-    border: 1px solid var(--border); background: #fff;
-    font-size: 14px; color: var(--text);
-    outline: none; cursor: pointer; transition: border-color .15s;
+   flex: 1; min-width: 130px;
+   padding: 9px 10px; border-radius: 8px;
+   border: 1px solid var(--border); background: #fff;
+   font-size: 14px; color: var(--text);
+   outline: none; cursor: pointer; transition: border-color .15s;
   }
   .select-row select:focus {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 2px rgba(46,109,187,.15);
+   border-color: var(--blue);
+   box-shadow: 0 0 0 2px rgba(46,109,187,.15);
   }
 
   /* カード */
   .card {
-    background: var(--surface);
-    border-radius: 12px;
-    box-shadow: var(--shadow);
-    border: 1px solid var(--border);
-    margin-bottom: 16px;
-    overflow: hidden;
+   background: var(--surface);
+   border-radius: 12px;
+   box-shadow: var(--shadow);
+   border: 1px solid var(--border);
+   margin-bottom: 16px;
+   overflow: hidden;
   }
 
   .card-header {
-    background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
-    color: #fff;
-    padding: 10px 16px;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: .04em;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+   background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+   color: #fff;
+   padding: 10px 16px;
+   font-size: 16px;
+   font-weight: 700;
+   letter-spacing: .04em;
+   display: flex;
+   align-items: center;
+   gap: 8px;
   }
   .ship-num { font-size: 11px; opacity: .65; font-weight: 400; }
   .type-badge {
-    font-size: 11px; background: rgba(255,255,255,.18);
-    border-radius: 4px; padding: 2px 7px; margin-left: auto; font-weight: 400;
+   font-size: 11px; background: rgba(255,255,255,.18);
+   border-radius: 4px; padding: 2px 7px; margin-left: auto; font-weight: 400;
   }
 
   /* ===== 画像 + iframe 横並び ===== */
   .map-media {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    background: #f8f9fc;
+   display: flex;
+   border-bottom: 1px solid var(--border);
+   background: #f8f9fc;
   }
 
   /* 左：画像（300×180固定） */
   .map-media-img {
-    flex: 0 0 300px;
-    border-right: 1px solid var(--border);
-    position: relative;
-    overflow: hidden;
-    background: #e8edf5;
+   flex: 1;
+   border-right: 1px solid var(--border);
+   position: relative;
+   overflow: hidden;
+   background: #e8edf5;
   }
   .map-media-img img {
-    width: 300px;
-    height: 280px;
-    object-fit: cover;
-    display: block;
-    cursor: pointer;
-    transition: opacity .15s;
+   width: 100%;
+   height: 320px;
+   object-fit: cover;
+   display: block;
+   cursor: pointer;
+   transition: opacity .15s;
   }
   .map-media-img img:hover { opacity: .85; }
   .map-media-img .no-img {
-    width: 300px; height: 280px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 12px; color: var(--text-sub);
+   width: 100%; height: 320px;
+   display: flex; align-items: center; justify-content: center;
+   font-size: 12px; color: var(--text-sub);
   }
 
   /* 右：iframe（残り幅 × 280px高さ） */
   .map-media-frame {
-    flex: 1;
-    min-width: 0;
-    position: relative;
+   flex: 1;
+   min-width: 0;
+   position: relative;
   }
   .map-media-frame iframe {
-    width: 100%;
-    height: 280px;
-    border: none;
-    display: block;
+   width: 100%;
+   height: 320px;
+   border: none;
+   display: block;
   }
   .map-media-frame .frame-label {
-    position: absolute;
-    top: 4px; right: 6px;
-    font-size: 10px;
-    color: var(--text-sub);
-    background: rgba(255,255,255,.8);
-    padding: 1px 5px;
-    border-radius: 3px;
-    pointer-events: none;
+   position: absolute;
+   top: 4px; right: 6px;
+   font-size: 10px;
+   color: var(--text-sub);
+   background: rgba(255,255,255,.8);
+   padding: 1px 5px;
+   border-radius: 3px;
+   pointer-events: none;
   }
   .map-media-link {
-    display: block;
-    padding: 4px 10px;
-    font-size: 11px;
-    background: var(--blue-light);
-    border-top: 1px solid var(--border);
-    color: var(--blue);
-    text-decoration: none;
-    text-align: right;
+   display: block;
+   padding: 4px 10px;
+   font-size: 11px;
+   background: var(--blue-light);
+   border-top: 1px solid var(--border);
+   color: var(--blue);
+   text-decoration: none;
+   text-align: right;
   }
   .map-media-link:hover { background: #d0e4f8; }
 
   /* 艦名モード用：小さめ横並び */
   .map-media-sm {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    background: #f8f9fc;
+   display: flex;
+   border-bottom: 1px solid var(--border);
+   background: #f8f9fc;
   }
   .map-media-sm .map-media-img {
-    flex: 0 0 200px;
+   flex: 1;
   }
   .map-media-sm .map-media-img img {
-    width: 200px;
-    height: 200px;
+   width: 100%;
+   height: 240px;
   }
   .map-media-sm .map-media-img .no-img {
-    width: 200px; height: 200px;
+   width: 100%; height: 240px;
   }
   .map-media-sm .map-media-frame iframe {
-    height: 200px;
+   height: 240px;
   }
 
   /* ノード・艦種 */
   .node-header {
-    background: var(--blue-light);
-    padding: 6px 14px;
-    font-size: 12px; font-weight: 700; color: var(--navy2);
-    letter-spacing: .06em;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    display: flex; align-items: center; gap: 6px;
+   background: var(--blue-light);
+   padding: 6px 14px;
+   font-size: 12px; font-weight: 700; color: var(--navy2);
+   letter-spacing: .06em;
+   border-top: 1px solid var(--border);
+   border-bottom: 1px solid var(--border);
+   display: flex; align-items: center; gap: 6px;
   }
   .node-ship-count { font-size: 11px; font-weight: 400; color: var(--text-sub); margin-left: auto; }
 
   .type-header {
-    background: #f4f6fb;
-    padding: 4px 20px;
-    font-size: 11px; font-weight: 700; color: var(--navy2);
-    letter-spacing: .08em; border-bottom: 1px solid #eaeff8;
+   background: #f4f6fb;
+   padding: 4px 20px;
+   font-size: 11px; font-weight: 700; color: var(--navy2);
+   letter-spacing: .08em; border-bottom: 1px solid #eaeff8;
   }
 
   /* ドロップ行 */
   .drop-row {
-    display: flex; align-items: center;
-    padding: 7px 14px; border-bottom: 1px solid #f0f3f8;
-    gap: 6px; flex-wrap: wrap;
+   display: flex; align-items: center;
+   padding: 7px 14px; border-bottom: 1px solid #f0f3f8;
+   gap: 6px; flex-wrap: wrap;
   }
   .drop-row:last-child { border-bottom: none; }
   .drop-row.clickable { cursor: pointer; transition: background .1s; }
@@ -245,35 +245,35 @@
 
   /* 艦名モード：マップ見出し */
   .map-subtitle {
-    background: #f4f6fb;
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    padding: 6px 14px;
-    font-size: 13px; font-weight: 700; color: var(--navy2);
-    display: flex; align-items: center; gap: 8px;
+   background: #f4f6fb;
+   border-top: 1px solid var(--border);
+   border-bottom: 1px solid var(--border);
+   padding: 6px 14px;
+   font-size: 13px; font-weight: 700; color: var(--navy2);
+   display: flex; align-items: center; gap: 8px;
   }
 
   /* 改造情報 */
   .modify-box {
-    background: #f0f7ee; border-left: 3px solid #3aaa60;
-    padding: 8px 14px; border-bottom: 1px solid var(--border);
+   background: #f0f7ee; border-left: 3px solid #3aaa60;
+   padding: 8px 14px; border-bottom: 1px solid var(--border);
   }
   .modify-title { font-size: 11px; font-weight: 700; color: var(--green); letter-spacing: .08em; margin-bottom: 5px; }
   .modify-items { display: flex; flex-wrap: wrap; gap: 6px; }
   .modify-item {
-    background: #fff; border: 1px solid #a8d8b8;
-    border-radius: 5px; padding: 2px 8px;
-    font-size: 12px; color: var(--green); font-weight: 600;
+   background: #fff; border: 1px solid #a8d8b8;
+   border-radius: 5px; padding: 2px 8px;
+   font-size: 12px; color: var(--green); font-weight: 600;
   }
 
   /* 建造（折りたたみ） */
   .build-toggle {
-    display: flex; align-items: center; gap: 8px;
-    padding: 8px 14px;
-    background: #fef8ee; border-top: 2px solid #f0e8c0;
-    cursor: pointer; user-select: none;
-    font-size: 12px; font-weight: 700; color: #8a5c00;
-    letter-spacing: .06em; transition: background .1s;
+   display: flex; align-items: center; gap: 8px;
+   padding: 8px 14px;
+   background: #fef8ee; border-top: 2px solid #f0e8c0;
+   cursor: pointer; user-select: none;
+   font-size: 12px; font-weight: 700; color: #8a5c00;
+   letter-spacing: .06em; transition: background .1s;
   }
   .build-toggle:hover { background: #fdf0d0; }
   .build-toggle .chevron { margin-left: auto; transition: transform .2s; font-size: 10px; }
@@ -286,79 +286,79 @@
   .recipe-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
   .recipe-vals { display: flex; gap: 4px; align-items: center; }
   .recipe-cell {
-    background: #fffbf0; border: 1px solid #ddc870; border-radius: 5px;
-    padding: 3px 9px; font-size: 13px; font-weight: 700; color: #6b4a00;
-    min-width: 36px; text-align: center;
+   background: #fffbf0; border: 1px solid #ddc870; border-radius: 5px;
+   padding: 3px 9px; font-size: 13px; font-weight: 700; color: #6b4a00;
+   min-width: 36px; text-align: center;
   }
   .recipe-sep { color: #bba050; font-size: 11px; }
   .big-badge {
-    background: #fff3cd; border: 1px solid #f0b030; border-radius: 4px;
-    padding: 1px 6px; font-size: 11px; color: #8a5c00; font-weight: 700;
+   background: #fff3cd; border: 1px solid #f0b030; border-radius: 4px;
+   padding: 1px 6px; font-size: 11px; color: #8a5c00; font-weight: 700;
   }
   .recipe-meta { font-size: 11px; color: var(--text-sub); display: flex; flex-wrap: wrap; gap: 12px; }
   .recipe-meta b { color: var(--text); }
   .recipe-ships {
-    font-size: 11px; color: var(--text-sub);
-    display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px;
+   font-size: 11px; color: var(--text-sub);
+   display: flex; flex-wrap: wrap; gap: 4px; align-items: center; margin-top: 6px;
   }
   .recipe-ships .label { font-weight: 700; color: var(--text-sub); white-space: nowrap; }
   .recipe-ship-tag {
-    background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px; color: #555;
+   background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px; color: #555;
   }
 
   .no-data { padding: 10px 14px; font-size: 12px; color: var(--text-sub); font-style: italic; }
 
   /* ===== 艦娘詳細モーダル ===== */
   #shipModal {
-    display: none;
-    position: fixed; inset: 0; z-index: 200;
-    background: rgba(10,20,40,.6);
-    align-items: flex-start;
-    justify-content: center;
-    padding: 40px 12px 20px;
-    overflow-y: auto;
+   display: none;
+   position: fixed; inset: 0; z-index: 200;
+   background: rgba(10,20,40,.6);
+   align-items: flex-start;
+   justify-content: center;
+   padding: 40px 12px 20px;
+   overflow-y: auto;
   }
   #shipModal.open { display: flex; }
 
   .modal-box {
-    background: var(--surface);
-    border-radius: 14px;
-    box-shadow: 0 8px 40px rgba(0,0,0,.35);
-    width: 100%; max-width: 700px;
-    overflow: hidden;
-    animation: modalIn .18s ease;
+   background: var(--surface);
+   border-radius: 14px;
+   box-shadow: 0 8px 40px rgba(0,0,0,.35);
+   width: 100%; max-width: 700px;
+   overflow: hidden;
+   animation: modalIn .18s ease;
   }
   @keyframes modalIn {
-    from { opacity: 0; transform: translateY(-12px) scale(.98); }
-    to   { opacity: 1; transform: translateY(0) scale(1); }
+   from { opacity: 0; transform: translateY(-12px) scale(.98); }
+   to  { opacity: 1; transform: translateY(0) scale(1); }
   }
 
   .modal-header {
-    background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
-    color: #fff;
-    padding: 10px 14px 10px 16px;
-    font-size: 16px; font-weight: 700; letter-spacing: .04em;
-    display: flex; align-items: center; gap: 8px;
+   background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+   color: #fff;
+   padding: 10px 14px 10px 16px;
+   font-size: 16px; font-weight: 700; letter-spacing: .04em;
+   display: flex; align-items: center; gap: 8px;
   }
   .modal-header .type-badge { margin-left: auto; }
   .modal-close {
-    background: rgba(255,255,255,.15); border: none; border-radius: 5px;
-    color: #fff; font-size: 14px; padding: 2px 8px; margin-left: 8px;
-    cursor: pointer; transition: background .1s; font-family: inherit; line-height: 1.5;
+   background: rgba(255,255,255,.15); border: none; border-radius: 5px;
+   color: #fff; font-size: 14px; padding: 2px 8px; margin-left: 8px;
+   cursor: pointer; transition: background .1s; font-family: inherit; line-height: 1.5;
   }
   .modal-close:hover { background: rgba(255,80,80,.5); }
 
   /* モーダル内タブ */
   .modal-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--border);
-    background: #f8f9fc;
+   display: flex;
+   border-bottom: 1px solid var(--border);
+   background: #f8f9fc;
   }
   .modal-tab {
-    padding: 8px 16px;
-    font-size: 12px; font-weight: 700; color: var(--text-sub);
-    cursor: pointer; border-bottom: 2px solid transparent;
-    transition: all .15s; user-select: none;
+   padding: 8px 16px;
+   font-size: 12px; font-weight: 700; color: var(--text-sub);
+   cursor: pointer; border-bottom: 2px solid transparent;
+   transition: all .15s; user-select: none;
   }
   .modal-tab.active { color: var(--navy); border-bottom-color: var(--blue); background: #fff; }
   .modal-tab:hover:not(.active) { background: var(--blue-light); }
@@ -368,54 +368,54 @@
 
   /* 画像モーダル */
   #imgModal {
-    display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.78); z-index: 300;
-    align-items: center; justify-content: center; cursor: pointer;
+   display: none; position: fixed; inset: 0;
+   background: rgba(0,0,0,.78); z-index: 300;
+   align-items: center; justify-content: center; cursor: pointer;
   }
   #imgModal.open { display: flex; }
   #imgModal img {
-    width: 600px; height: 360px; object-fit: cover;
-    border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
+   width: 600px; height: 360px; object-fit: cover;
+   border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
 
   @media (max-width: 640px) {
-    .map-media, .map-media-sm { flex-direction: column; }
-    .map-media-img, .map-media-sm .map-media-img { flex: none; border-right: none; border-bottom: 1px solid var(--border); }
-    .map-media-img img { width: 100%; height: auto; }
-    .map-media-sm .map-media-img img { width: 100%; height: auto; }
-    .map-media-img .no-img, .map-media-sm .map-media-img .no-img { width: 100%; }
-    .map-media-frame iframe { height: 260px; }
-    .select-row { flex-direction: column; }
-    .level-info { margin-left: 0; }
+   .map-media, .map-media-sm { flex-direction: column; }
+   .map-media-img, .map-media-sm .map-media-img { flex: none; border-right: none; border-bottom: 1px solid var(--border); }
+   .map-media-img img { width: 100%; height: auto; }
+   .map-media-sm .map-media-img img { width: 100%; height: auto; }
+   .map-media-img .no-img, .map-media-sm .map-media-img .no-img { width: 100%; }
+   .map-media-frame iframe { height: 260px; }
+   .select-row { flex-direction: column; }
+   .level-info { margin-left: 0; }
   }
 </style>
 </head>
 <body>
 
-<header>⚓ 艦これ ドロップ検索</header>
+<header> 艦これ ドロップ検索</header>
 
 <div class="container">
 
   <div class="mode-tabs">
-    <input type="radio" name="mode" id="m-map" value="map" checked>
-    <label for="m-map">🗺 海域から探す</label>
-    <input type="radio" name="mode" id="m-ship" value="ship">
-    <label for="m-ship">⚓ 艦名から探す</label>
+   <input type="radio" name="mode" id="m-map" value="map" checked>
+   <label for="m-map"> 海域から探す</label>
+   <input type="radio" name="mode" id="m-ship" value="ship">
+   <label for="m-ship"> 艦名から探す</label>
   </div>
 
   <div id="mapArea" class="search-box">
-    <div class="notice">海域を選択するとノードごとのドロップ艦・条件が表示されます。艦名をクリックすると詳細が開きます。</div>
-    <div class="select-row">
-      <select id="mapSelect"></select>
-    </div>
+   <div class="notice">海域を選択するとノードごとのドロップ艦・条件が表示されます。艦名をクリックすると詳細が開きます。</div>
+   <div class="select-row">
+     <select id="mapSelect"></select>
+   </div>
   </div>
 
   <div id="shipArea" class="search-box" style="display:none">
-    <div class="notice">艦種を絞ってから艦名を選んでください</div>
-    <div class="select-row">
-      <select id="typeSelect"></select>
-      <select id="shipSelect"></select>
-    </div>
+   <div class="notice">艦種を絞ってから艦名を選んでください</div>
+   <div class="select-row">
+     <select id="typeSelect"></select>
+     <select id="shipSelect"></select>
+   </div>
   </div>
 
   <div id="result"></div>
@@ -425,22 +425,22 @@
 <!-- 艦娘詳細モーダル -->
 <div id="shipModal" onclick="onModalBgClick(event)">
   <div class="modal-box">
-    <div class="modal-header">
-      <span class="ship-num" id="modalNum"></span>
-      <span id="modalTitle"></span>
-      <span class="type-badge" id="modalType"></span>
-      <button class="modal-close" onclick="closeShipModal()">✕</button>
-    </div>
-    <div id="modalModify" style="display:none" class="modify-box">
-      <div class="modify-title">🔧 改造情報</div>
-      <div class="modify-items" id="modalModifyItems"></div>
-    </div>
-    <div class="modal-tabs">
-      <div class="modal-tab active" id="tabDrop" onclick="switchModalTab('drop')">📋 ドロップ海域</div>
-      <div class="modal-tab" id="tabBuild" onclick="switchModalTab('build')">🔨 建造レシピ</div>
-    </div>
-    <div class="modal-pane active" id="modalDropPane"></div>
-    <div class="modal-pane" id="modalBuildPane"></div>
+   <div class="modal-header">
+     <span class="ship-num" id="modalNum"></span>
+     <span id="modalTitle"></span>
+     <span class="type-badge" id="modalType"></span>
+     <button class="modal-close" onclick="closeShipModal()"></button>
+   </div>
+   <div id="modalModify" style="display:none" class="modify-box">
+     <div class="modify-title"> 改造情報</div>
+     <div class="modify-items" id="modalModifyItems"></div>
+   </div>
+   <div class="modal-tabs">
+     <div class="modal-tab active" id="tabDrop" onclick="switchModalTab('drop')"> ドロップ海域</div>
+     <div class="modal-tab" id="tabBuild" onclick="switchModalTab('build')"> 建造レシピ</div>
+   </div>
+   <div class="modal-pane active" id="modalDropPane"></div>
+   <div class="modal-pane" id="modalBuildPane"></div>
   </div>
 </div>
 
@@ -479,35 +479,35 @@ Promise.all([
 function preprocess() {
   mapIndex = {}; shipDropIndex = {}; typeIndex = {};
   for (const [ship, body] of Object.entries(RAW)) {
-    const type = body.type || 'その他';
-    if (!typeIndex[type]) typeIndex[type] = [];
-    typeIndex[type].push(ship);
-    shipDropIndex[ship] = {};
-    if (!body.maps) continue;
-    for (const [map, nodes] of Object.entries(body.maps)) {
-      if (!mapIndex[map]) mapIndex[map] = {};
-      shipDropIndex[ship][map] = {};
-      for (const [node, cond] of Object.entries(nodes)) {
-        const ranks = cond.get_rank || [];
-        const lv    = cond.level   || [1, 120];
-        if (!mapIndex[map][node]) mapIndex[map][node] = [];
-        mapIndex[map][node].push({ ship, type, ranks, lv });
-        shipDropIndex[ship][map][node] = { ranks, lv };
-      }
-    }
+   const type = body.type || 'その他';
+   if (!typeIndex[type]) typeIndex[type] = [];
+   typeIndex[type].push(ship);
+   shipDropIndex[ship] = {};
+   if (!body.maps) continue;
+   for (const [map, nodes] of Object.entries(body.maps)) {
+     if (!mapIndex[map]) mapIndex[map] = {};
+     shipDropIndex[ship][map] = {};
+     for (const [node, cond] of Object.entries(nodes)) {
+       const ranks = cond.get_rank || [];
+       const lv   = cond.level  || [1, 120];
+       if (!mapIndex[map][node]) mapIndex[map][node] = [];
+       mapIndex[map][node].push({ ship, type, ranks, lv });
+       shipDropIndex[ship][map][node] = { ranks, lv };
+     }
+   }
   }
 }
 
 function buildSelects() {
   const ms = $('mapSelect');
   Object.keys(mapIndex).sort(mapSort).forEach(m => {
-    const o = document.createElement('option');
-    o.value = m; o.textContent = m; ms.appendChild(o);
+   const o = document.createElement('option');
+   o.value = m; o.textContent = m; ms.appendChild(o);
   });
   const ts = $('typeSelect');
   Object.keys(typeIndex).sort((a,b) => typeOrder(a) - typeOrder(b)).forEach(t => {
-    const o = document.createElement('option');
-    o.value = t; o.textContent = t; ts.appendChild(o);
+   const o = document.createElement('option');
+   o.value = t; o.textContent = t; ts.appendChild(o);
   });
   updateShipSelect();
 }
@@ -517,19 +517,19 @@ function updateShipSelect() {
   const ss = $('shipSelect');
   ss.innerHTML = '';
   (typeIndex[type] || []).slice()
-    .sort((a, b) => parseInt(RAW[a]?.number||'9999') - parseInt(RAW[b]?.number||'9999'))
-    .forEach(s => {
-      const o = document.createElement('option');
-      o.value = s; o.textContent = s; ss.appendChild(o);
-    });
+   .sort((a, b) => parseInt(RAW[a]?.number||'9999') - parseInt(RAW[b]?.number||'9999'))
+   .forEach(s => {
+     const o = document.createElement('option');
+     o.value = s; o.textContent = s; ss.appendChild(o);
+   });
 }
 
 document.querySelectorAll('input[name="mode"]').forEach(r => {
   r.addEventListener('change', () => {
-    const v = r.value;
-    $('mapArea').style.display  = v === 'map'  ? '' : 'none';
-    $('shipArea').style.display = v === 'ship' ? '' : 'none';
-    closeShipModal(); update();
+   const v = r.value;
+   $('mapArea').style.display  = v === 'map'  ? '' : 'none';
+   $('shipArea').style.display = v === 'ship' ? '' : 'none';
+   closeShipModal(); update();
   });
 });
 $('mapSelect').onchange  = () => { closeShipModal(); update(); };
@@ -548,13 +548,13 @@ function mediaHtml(map, size) {
   const cls = size === 'sm' ? 'map-media-sm' : 'map-media';
   const url = `https://zekamashi.net/kancolle-kouryaku/${map}/`;
   return `<div class="${cls}">
-    <div class="map-media-img">
-      <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openImgModal(this.src)" onerror="this.style.display='none'">
-    </div>
-    <div class="map-media-frame">
-      <iframe src="${url}" loading="lazy" title="${map} 攻略"></iframe>
-      <a class="map-media-link" href="${url}" target="_blank">攻略ページを別タブで開く ↗</a>
-    </div>
+   <div class="map-media-img">
+     <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openImgModal(this.src)" onerror="this.style.display='none'">
+   </div>
+   <div class="map-media-frame">
+     <iframe src="${url}" loading="lazy" title="${map} 攻略"></iframe>
+     <a class="map-media-link" href="${url}" target="_blank">攻略ページを別タブで開く ↗</a>
+   </div>
   </div>`;
 }
 
@@ -565,29 +565,29 @@ function showMap() {
   if (!nodes) return;
 
   let html = `<div class="card">`;
-  html += `<div class="card-header">🗺 ${map}</div>`;
+  html += `<div class="card-header"> ${map}</div>`;
   html += mediaHtml(map, 'lg');
 
   for (const node of Object.keys(nodes).sort()) {
-    const ships = nodes[node];
-    const byType = {};
-    for (const d of ships) {
-      if (!byType[d.type]) byType[d.type] = [];
-      byType[d.type].push(d);
-    }
-    const sortedTypes = Object.keys(byType).sort((a,b) => typeOrder(a) - typeOrder(b));
-    html += `<div class="node-header">◆ ノード ${node}<span class="node-ship-count">${ships.length}艦</span></div>`;
-    for (const type of sortedTypes) {
-      const list = byType[type].slice().sort((a,b) => jaSort(a.ship, b.ship));
-      html += `<div class="type-header">${type}</div>`;
-      for (const d of list) {
-        html += `<div class="drop-row clickable" onclick="openDetail('${esc(d.ship)}')">`;
-        html += `<span class="ship-name">${d.ship}</span>`;
-        html += `<div class="ranks">${ranksHtml(d.ranks)}</div>`;
-        html += `<span class="level-info">Lv<b>${d.lv[0]}</b> 〜 <b>${d.lv[1]}</b></span>`;
-        html += `</div>`;
-      }
-    }
+   const ships = nodes[node];
+   const byType = {};
+   for (const d of ships) {
+     if (!byType[d.type]) byType[d.type] = [];
+     byType[d.type].push(d);
+   }
+   const sortedTypes = Object.keys(byType).sort((a,b) => typeOrder(a) - typeOrder(b));
+   html += `<div class="node-header">◆ ノード ${node}<span class="node-ship-count">${ships.length}艦</span></div>`;
+   for (const type of sortedTypes) {
+     const list = byType[type].slice().sort((a,b) => jaSort(a.ship, b.ship));
+     html += `<div class="type-header">${type}</div>`;
+     for (const d of list) {
+       html += `<div class="drop-row clickable" onclick="openDetail('${esc(d.ship)}')">`;
+       html += `<span class="ship-name">${d.ship}</span>`;
+       html += `<div class="ranks">${ranksHtml(d.ranks)}</div>`;
+       html += `<span class="level-info">Lv<b>${d.lv[0]}</b> 〜 <b>${d.lv[1]}</b></span>`;
+       html += `</div>`;
+     }
+   }
   }
   html += `</div>`;
   $('result').innerHTML = html;
@@ -609,63 +609,63 @@ function openDetail(ship) {
   // 改造情報
   const modBox = $('modalModify');
   if (body.modify && Object.keys(body.modify).length > 0) {
-    $('modalModifyItems').innerHTML = Object.entries(body.modify)
-      .map(([k,v]) => `<span class="modify-item">${k}（Lv${v}）</span>`).join('');
-    modBox.style.display = '';
+   $('modalModifyItems').innerHTML = Object.entries(body.modify)
+     .map(([k,v]) => `<span class="modify-item">${k}（Lv${v}）</span>`).join('');
+   modBox.style.display = '';
   } else {
-    modBox.style.display = 'none';
+   modBox.style.display = 'none';
   }
 
   // ドロップペイン
   let dropHtml = '';
   if (drops && Object.keys(drops).length > 0) {
-    for (const map of Object.keys(drops).sort(mapSort)) {
-      dropHtml += `<div class="map-subtitle">🗺 ${map}</div>`;
-      dropHtml += mediaHtml(map, 'sm');
-      for (const node of Object.keys(drops[map]).sort()) {
-        const { ranks, lv } = drops[map][node];
-        dropHtml += `<div class="drop-row">`;
-        dropHtml += `<span class="ship-name">ノード ${node}</span>`;
-        dropHtml += `<div class="ranks">${ranksHtml(ranks)}</div>`;
-        dropHtml += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
-        dropHtml += `</div>`;
-      }
-    }
+   for (const map of Object.keys(drops).sort(mapSort)) {
+     dropHtml += `<div class="map-subtitle"> ${map}</div>`;
+     dropHtml += mediaHtml(map, 'sm');
+     for (const node of Object.keys(drops[map]).sort()) {
+       const { ranks, lv } = drops[map][node];
+       dropHtml += `<div class="drop-row">`;
+       dropHtml += `<span class="ship-name">ノード ${node}</span>`;
+       dropHtml += `<div class="ranks">${ranksHtml(ranks)}</div>`;
+       dropHtml += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
+       dropHtml += `</div>`;
+     }
+   }
   } else {
-    dropHtml = '<div class="no-data">ドロップデータなし</div>';
+   dropHtml = '<div class="no-data">ドロップデータなし</div>';
   }
   $('modalDropPane').innerHTML = dropHtml;
 
   // 建造ペイン
   let buildHtml = '';
   if (buildData?.build?.length > 0) {
-    for (const r of buildData.build) {
-      buildHtml += `<div class="recipe-block">`;
-      buildHtml += `<div class="recipe-top"><div class="recipe-vals">`;
-      r.recipe.forEach((v, i) => {
-        if (i > 0) buildHtml += `<span class="recipe-sep">/</span>`;
-        buildHtml += `<span class="recipe-cell">${v}</span>`;
-      });
-      buildHtml += `</div>`;
-      if (r.big) buildHtml += `<span class="big-badge">大型建造</span>`;
-      buildHtml += `</div>`;
-      buildHtml += `<div class="recipe-meta">`;
-      buildHtml += `<span>開発資材: <b>${r.Dev}</b></span>`;
-      buildHtml += `<span>試行数: <b>${r.count.toLocaleString()}</b></span>`;
-      buildHtml += `<span>確率: <b>${r.rate}%</b></span>`;
-      buildHtml += `</div>`;
-      if (r.ship?.length > 0) {
-        const shown = r.ship.slice(0, 30);
-        const rest = r.ship.length - 30;
-        buildHtml += `<div class="recipe-ships"><span class="label">同レシピで来る艦：</span>`;
-        shown.forEach(s => { buildHtml += `<span class="recipe-ship-tag">${s}</span>`; });
-        if (rest > 0) buildHtml += `<span class="recipe-ship-tag">他${rest}艦…</span>`;
-        buildHtml += `</div>`;
-      }
-      buildHtml += `</div>`;
-    }
+   for (const r of buildData.build) {
+     buildHtml += `<div class="recipe-block">`;
+     buildHtml += `<div class="recipe-top"><div class="recipe-vals">`;
+     r.recipe.forEach((v, i) => {
+       if (i > 0) buildHtml += `<span class="recipe-sep">/</span>`;
+       buildHtml += `<span class="recipe-cell">${v}</span>`;
+     });
+     buildHtml += `</div>`;
+     if (r.big) buildHtml += `<span class="big-badge">大型建造</span>`;
+     buildHtml += `</div>`;
+     buildHtml += `<div class="recipe-meta">`;
+     buildHtml += `<span>開発資材: <b>${r.Dev}</b></span>`;
+     buildHtml += `<span>試行数: <b>${r.count.toLocaleString()}</b></span>`;
+     buildHtml += `<span>確率: <b>${r.rate}%</b></span>`;
+     buildHtml += `</div>`;
+     if (r.ship?.length > 0) {
+       const shown = r.ship.slice(0, 30);
+       const rest = r.ship.length - 30;
+       buildHtml += `<div class="recipe-ships"><span class="label">同レシピで来る艦：</span>`;
+       shown.forEach(s => { buildHtml += `<span class="recipe-ship-tag">${s}</span>`; });
+       if (rest > 0) buildHtml += `<span class="recipe-ship-tag">他${rest}艦…</span>`;
+       buildHtml += `</div>`;
+     }
+     buildHtml += `</div>`;
+   }
   } else {
-    buildHtml = '<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>';
+   buildHtml = '<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>';
   }
   $('modalBuildPane').innerHTML = buildHtml;
 
