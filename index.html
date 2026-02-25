@@ -3,189 +3,802 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>艦これドロップ検索</title>
+<title>艦これ ドロップ検索</title>
 <style>
-body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:#f3f5f8;margin:0}
-header{background:#22324d;color:#fff;padding:14px 16px;font-size:20px;text-align:center}
-.container{max-width:1100px;margin:0 auto;padding:16px}
-.mode{display:flex;gap:16px;align-items:center;margin-bottom:10px}
-.mode label{background:#fff;border-radius:999px;padding:8px 14px;box-shadow:0 1px 3px rgba(0,0,0,.15);cursor:pointer}
-.mode input{margin-right:6px}
-select{width:100%;padding:10px;border-radius:10px;border:1px solid #cfd6e4;margin:10px 0 14px 0;font-size:15px}
-.card{background:#fff;border-radius:14px;box-shadow:0 2px 8px rgba(0,0,0,.12);padding:16px;margin:14px 0}
-.mapTitle{font-size:22px;font-weight:700;margin:10px 0}
-.nodeTitle{font-weight:700;color:#1f3a5f;margin:8px 0 4px 10px}
-.drop{margin-left:20px;padding:6px 0;border-bottom:1px solid #eef1f6}
-.rank{color:#c0392b;font-weight:700;margin-left:6px}
-.level{color:#1e7acb;margin-left:6px}
-.badge{background:#e8eef9;border-radius:8px;padding:2px 6px;margin-left:6px;font-size:12px}
-.notice{color:#56627a;margin:6px 0 12px 0}
-.mapImage{width:100%;max-width:600px;height:auto;border-radius:12px;margin:10px 0;box-shadow:0 2px 6px rgba(0,0,0,.15)}
-.modifyBox{background:#f0f4ff;border:1px solid #c8d6ff;border-radius:10px;padding:10px;margin:10px 0}
+  :root {
+    --bg: #f0f3f8;
+    --surface: #ffffff;
+    --navy: #1e3154;
+    --navy2: #2c4a7a;
+    --blue: #2e6dbb;
+    --blue-light: #e8f0fb;
+    --border: #d0d8e8;
+    --text: #1a2640;
+    --text-sub: #5a6a84;
+    --green: #1a7a3e;
+    --shadow: 0 2px 8px rgba(0,0,0,.1);
+    --shadow-sm: 0 1px 4px rgba(0,0,0,.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  header {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+    color: #fff;
+    padding: 14px 16px;
+    text-align: center;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: .06em;
+    box-shadow: 0 2px 8px rgba(0,0,0,.25);
+  }
+
+  .container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 16px 12px 60px;
+  }
+
+  /* モード切替タブ */
+  .mode-tabs {
+    display: flex;
+    background: var(--surface);
+    border-radius: 10px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    margin-bottom: 14px;
+    border: 1px solid var(--border);
+  }
+
+  .mode-tabs label {
+    flex: 1;
+    text-align: center;
+    padding: 10px 8px;
+    cursor: pointer;
+    font-weight: 600;
+    color: var(--text-sub);
+    transition: all .15s;
+    user-select: none;
+    font-size: 13px;
+  }
+
+  .mode-tabs input { display: none; }
+
+  .mode-tabs input:checked + label {
+    background: var(--navy);
+    color: #fff;
+  }
+
+  .mode-tabs label:hover {
+    background: var(--blue-light);
+  }
+
+  .mode-tabs input:checked + label:hover {
+    background: var(--navy);
+  }
+
+  /* 検索ボックス */
+  .search-box {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+    padding: 14px 16px;
+    margin-bottom: 14px;
+  }
+
+  .notice {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-bottom: 8px;
+  }
+
+  .select-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .select-row select {
+    flex: 1;
+    min-width: 130px;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #fff;
+    font-size: 14px;
+    color: var(--text);
+    outline: none;
+    cursor: pointer;
+    transition: border-color .15s;
+  }
+
+  .select-row select:focus {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 2px rgba(46,109,187,.15);
+  }
+
+  /* カード共通 */
+  .card {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+    margin-bottom: 16px;
+    overflow: hidden;
+  }
+
+  .card-header {
+    background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+    color: #fff;
+    padding: 10px 16px;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: .04em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ship-num {
+    font-size: 11px;
+    opacity: .65;
+    font-weight: 400;
+  }
+
+  .type-badge {
+    font-size: 11px;
+    background: rgba(255,255,255,.18);
+    border-radius: 4px;
+    padding: 2px 7px;
+    margin-left: auto;
+    font-weight: 400;
+  }
+
+  .map-image {
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ノードヘッダー */
+  .node-header {
+    background: var(--blue-light);
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--navy2);
+    letter-spacing: .06em;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .node-ship-count {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--text-sub);
+    margin-left: auto;
+  }
+
+  /* 艦種グループ（海域モード） */
+  .type-header {
+    background: #f4f6fb;
+    padding: 4px 20px;
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--navy2);
+    letter-spacing: .08em;
+    border-bottom: 1px solid #eaeff8;
+  }
+
+  /* ドロップ行 */
+  .drop-row {
+    display: flex;
+    align-items: center;
+    padding: 7px 14px;
+    border-bottom: 1px solid #f0f3f8;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .drop-row:last-child { border-bottom: none; }
+
+  .drop-row.clickable {
+    cursor: pointer;
+    transition: background .1s;
+  }
+
+  .drop-row.clickable:hover {
+    background: #edf3fb;
+  }
+
+  .drop-row.clickable:hover .ship-name {
+    color: var(--blue);
+    text-decoration: underline;
+  }
+
+  .ship-name {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--navy);
+    min-width: 80px;
+  }
+
+  .type-tag {
+    font-size: 11px;
+    background: var(--blue-light);
+    color: var(--blue);
+    border-radius: 4px;
+    padding: 1px 6px;
+    border: 1px solid #c0d4f0;
+    white-space: nowrap;
+  }
+
+  .ranks {
+    display: flex;
+    gap: 3px;
+  }
+
+  .rank-badge {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .rank-S { background: #fef9e7; color: #b8860b; border: 1px solid #e8d060; }
+  .rank-A { background: #f0f0f0; color: #4a4a4a; border: 1px solid #c0c0c0; }
+  .rank-B { background: #fef4ec; color: #7b4f1e; border: 1px solid #d4a070; }
+
+  .level-info {
+    font-size: 12px;
+    color: var(--text-sub);
+    margin-left: auto;
+    white-space: nowrap;
+  }
+
+  .level-info b { color: var(--blue); }
+
+  /* 艦名モード：マップ見出し */
+  .map-subtitle {
+    background: #f4f6fb;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding: 7px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--navy2);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* 改造情報 */
+  .modify-box {
+    background: #f0f7ee;
+    border-left: 3px solid #3aaa60;
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .modify-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--green);
+    letter-spacing: .08em;
+    margin-bottom: 5px;
+  }
+
+  .modify-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .modify-item {
+    background: #fff;
+    border: 1px solid #a8d8b8;
+    border-radius: 5px;
+    padding: 2px 8px;
+    font-size: 12px;
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  /* 建造セクション */
+  .build-section {
+    border-top: 2px solid #f0e8c0;
+  }
+
+  .build-header {
+    background: #fef8ee;
+    padding: 8px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #8a5c00;
+    letter-spacing: .06em;
+    border-bottom: 1px solid #f0d890;
+  }
+
+  .recipe-block {
+    padding: 10px 14px;
+    border-bottom: 1px solid #faf0d0;
+  }
+
+  .recipe-block:last-child { border-bottom: none; }
+
+  .recipe-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+
+  .recipe-vals {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  .recipe-cell {
+    background: #fffbf0;
+    border: 1px solid #ddc870;
+    border-radius: 5px;
+    padding: 3px 9px;
+    font-size: 13px;
+    font-weight: 700;
+    color: #6b4a00;
+    min-width: 36px;
+    text-align: center;
+  }
+
+  .recipe-sep { color: #bba050; font-size: 11px; }
+
+  .big-badge {
+    background: #fff3cd;
+    border: 1px solid #f0b030;
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 11px;
+    color: #8a5c00;
+    font-weight: 700;
+  }
+
+  .recipe-meta {
+    font-size: 11px;
+    color: var(--text-sub);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .recipe-meta b { color: var(--text); }
+
+  .recipe-ships {
+    font-size: 11px;
+    color: var(--text-sub);
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    align-items: center;
+    margin-top: 6px;
+  }
+
+  .recipe-ships .label {
+    font-weight: 700;
+    color: var(--text-sub);
+    white-space: nowrap;
+  }
+
+  .recipe-ship-tag {
+    background: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 3px;
+    padding: 1px 5px;
+    color: #555;
+  }
+
+  .no-data {
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text-sub);
+    font-style: italic;
+  }
+
+  /* 詳細パネル（海域モードで艦クリック時） */
+  .detail-panel {
+    background: var(--surface);
+    border-radius: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.15);
+    border: 2px solid var(--blue);
+    margin-bottom: 16px;
+    overflow: hidden;
+    animation: slideIn .15s ease;
+  }
+
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .detail-close-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 7px 14px;
+    background: #e8f0fb;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--text-sub);
+    font-weight: 600;
+  }
+
+  .btn-close {
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 10px;
+    font-size: 12px;
+    color: var(--text-sub);
+    cursor: pointer;
+    transition: all .1s;
+    font-family: inherit;
+  }
+
+  .btn-close:hover {
+    background: #fee;
+    border-color: #e08080;
+    color: #c00;
+  }
+
+  @media (max-width: 480px) {
+    .select-row { flex-direction: column; }
+    .level-info { margin-left: 0; }
+  }
 </style>
 </head>
 <body>
-<header>艦これ ドロップ検索</header>
+
+<header>⚓ 艦これ ドロップ検索</header>
+
 <div class="container">
-  <div class="mode">
-    <label><input type="radio" name="mode" value="map" checked> 海域から探す</label>
-    <label><input type="radio" name="mode" value="ship"> 艦から探す</label>
+
+  <div class="mode-tabs">
+    <input type="radio" name="mode" id="m-map" value="map" checked>
+    <label for="m-map">🗺 海域から探す</label>
+    <input type="radio" name="mode" id="m-ship" value="ship">
+    <label for="m-ship">⚓ 艦名から探す</label>
   </div>
 
-  <div id="mapArea">
-    <div class="notice">海域を選択すると、マスごとにドロップ艦と条件が表示されます。</div>
-    <select id="mapSelect"></select>
+  <!-- 海域モード -->
+  <div id="mapArea" class="search-box">
+    <div class="notice">海域を選択するとノードごとのドロップ艦・条件が表示されます。艦名をクリックすると詳細情報が開きます。</div>
+    <div class="select-row">
+      <select id="mapSelect"></select>
+    </div>
   </div>
 
-  <div id="shipArea" style="display:none">
-    <div class="notice">艦種を選択してから艦を選んでください。</div>
-    <select id="typeSelect"></select>
-    <select id="shipSelect"></select>
+  <!-- 艦名モード -->
+  <div id="shipArea" class="search-box" style="display:none">
+    <div class="notice">艦種を絞ってから艦名を選んでください</div>
+    <div class="select-row">
+      <select id="typeSelect"></select>
+      <select id="shipSelect"></select>
+    </div>
   </div>
+
+  <!-- 詳細パネル（海域モードで艦クリック時） -->
+  <div id="detailArea" style="display:none"></div>
 
   <div id="result"></div>
+
 </div>
 
 <script>
 let RAW = null;
-let mapIndex = {};
-let shipIndex = {};
-let typeIndex = {}; // type -> ships
+let BUILD = null;
+let mapIndex = {};      // map -> node -> [{ship,type,ranks,lv}]
+let shipDropIndex = {}; // ship -> map -> node -> {ranks,lv}
+let typeIndex = {};     // type -> [ship]
 
-const result = document.getElementById('result');
-const mapSelect = document.getElementById('mapSelect');
-const shipSelect = document.getElementById('shipSelect');
-const mapArea = document.getElementById('mapArea');
-const shipArea = document.getElementById('shipArea');
+const $ = id => document.getElementById(id);
 
-function mapSort(a,b){
-  const pa=a.split('-').map(Number);
-  const pb=b.split('-').map(Number);
-  if(pa[0]!==pb[0]) return pa[0]-pb[0];
-  return pa[1]-pb[1];
+function mapSort(a, b) {
+  const [a1,a2] = a.split('-').map(Number);
+  const [b1,b2] = b.split('-').map(Number);
+  return a1!==b1 ? a1-b1 : a2-b2;
 }
 
-fetch('data.json', {cache:'no-store'})
-  .then(r=>r.json())
-  .then(json=>{
-    RAW=json;
-    preprocess();
-    buildLists();
-    update();
-  });
+function jaSort(a, b) { return a.localeCompare(b, 'ja'); }
 
-function preprocess(){
-  typeIndex = {};
-  mapIndex={}; shipIndex={};
-  for(const [ship,body] of Object.entries(RAW)){
-    const type=body.type||'';
-    shipIndex[ship]=[];
-    if(!typeIndex[type]) typeIndex[type]=[];
+const TYPE_ORDER = ['駆逐艦','軽巡洋艦','重巡洋艦','低速戦艦','高速戦艦','軽空母','正規空母','装甲空母','潜水艦','潜水空母','海防艦','水上機母艦','練習巡洋艦','工作艦','潜水母艦','揚陸艦','その他艦艇'];
+
+function typeOrder(t) {
+  const i = TYPE_ORDER.indexOf(t);
+  return i >= 0 ? i : 99;
+}
+
+// ===== データ読み込み =====
+Promise.all([
+  fetch('data.json').then(r => r.json()),
+  fetch('build_data.json').then(r => r.json()).catch(() => ({}))
+]).then(([data, build]) => {
+  RAW = data;
+  BUILD = build;
+  preprocess();
+  buildSelects();
+  update();
+});
+
+function preprocess() {
+  mapIndex = {}; shipDropIndex = {}; typeIndex = {};
+
+  for (const [ship, body] of Object.entries(RAW)) {
+    const type = body.type || 'その他';
+    if (!typeIndex[type]) typeIndex[type] = [];
     typeIndex[type].push(ship);
-    for(const [map,nodes] of Object.entries(body)){
-      if(map==='type'||map==='modify') continue;
-      if(!mapIndex[map]) mapIndex[map]={};
-      for(const [node,cond] of Object.entries(nodes)){
-        const level_min=cond.level?.[0]??'';
-        const level_max=cond.level?.[1]??'';
-        const ranks=(cond.get_rank||[]).join('/');
-        shipIndex[ship].push({map,node,ranks,level_min,level_max,type});
-        if(!mapIndex[map][node]) mapIndex[map][node]=[];
-        mapIndex[map][node].push({ship,ranks,level_min,level_max,type});
+    shipDropIndex[ship] = {};
+
+    if (!body.maps) continue;
+
+    for (const [map, nodes] of Object.entries(body.maps)) {
+      if (!mapIndex[map]) mapIndex[map] = {};
+      shipDropIndex[ship][map] = {};
+
+      for (const [node, cond] of Object.entries(nodes)) {
+        const ranks = cond.get_rank || [];
+        const lv    = cond.level   || [1, 120];
+
+        if (!mapIndex[map][node]) mapIndex[map][node] = [];
+        mapIndex[map][node].push({ ship, type, ranks, lv });
+
+        shipDropIndex[ship][map][node] = { ranks, lv };
       }
     }
   }
 }
 
-function buildLists(){
-  mapSelect.innerHTML='';
-  Object.keys(mapIndex).sort(mapSort).forEach(m=>{
-    const op=document.createElement('option'); op.value=m; op.textContent=m; mapSelect.appendChild(op);
-  });
-  // build type list
-  const typeSelect = document.getElementById('typeSelect');
-  typeSelect.innerHTML='';
-  Object.keys(typeIndex).sort((a,b)=>a.localeCompare(b,'ja')).forEach(t=>{
-    const op=document.createElement('option'); op.value=t; op.textContent=t; typeSelect.appendChild(op);
+// ===== セレクト構築 =====
+function buildSelects() {
+  const ms = $('mapSelect');
+  Object.keys(mapIndex).sort(mapSort).forEach(m => {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    ms.appendChild(o);
   });
 
-  // initial ship list
-  updateShipList();
+  const ts = $('typeSelect');
+  Object.keys(typeIndex)
+    .sort((a,b) => typeOrder(a) - typeOrder(b))
+    .forEach(t => {
+      const o = document.createElement('option');
+      o.value = t; o.textContent = t;
+      ts.appendChild(o);
+    });
+
+  updateShipSelect();
 }
 
-for(const r of document.querySelectorAll('input[name="mode"]')){
-  r.addEventListener('change',()=>{
-    const v=document.querySelector('input[name="mode"]:checked').value;
-    if(v==='map'){mapArea.style.display='block';shipArea.style.display='none';}
-    else{mapArea.style.display='none';shipArea.style.display='block';}
+function updateShipSelect() {
+  const type = $('typeSelect').value;
+  const ss = $('shipSelect');
+  ss.innerHTML = '';
+  (typeIndex[type] || [])
+    .slice()
+    .sort((a, b) => parseInt(RAW[a]?.number || '9999') - parseInt(RAW[b]?.number || '9999'))
+    .forEach(s => {
+      const o = document.createElement('option');
+      o.value = s; o.textContent = s;
+      ss.appendChild(o);
+    });
+}
+
+// ===== イベント =====
+document.querySelectorAll('input[name="mode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const v = r.value;
+    $('mapArea').style.display  = v === 'map'  ? '' : 'none';
+    $('shipArea').style.display = v === 'ship' ? '' : 'none';
+    closeDetail();
     update();
   });
-}
-mapSelect.onchange=update;
-shipSelect.onchange=update;
+});
 
-const typeSelect = document.getElementById('typeSelect');
-typeSelect.onchange=()=>{
-  updateShipList();
-  update();
-};
+$('mapSelect').onchange  = () => { closeDetail(); update(); };
+$('shipSelect').onchange = update;
+$('typeSelect').onchange = () => { updateShipSelect(); update(); };
 
-function updateShipList(){
-  const typeSelect = document.getElementById('typeSelect');
-  const selectedType = typeSelect.value;
-  shipSelect.innerHTML='';
-  if(!typeIndex[selectedType]) return;
-  typeIndex[selectedType].sort((a,b)=>a.localeCompare(b,'ja')).forEach(s=>{
-    const op=document.createElement('option'); op.value=s; op.textContent=s; shipSelect.appendChild(op);
-  });
+function update() {
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  $('result').innerHTML = '';
+  if (mode === 'map') showMap();
+  else showShip();
 }
 
-function update(){
+// ===== 海域表示 =====
+function showMap() {
+  const map = $('mapSelect').value;
+  const nodes = mapIndex[map];
+  if (!nodes) return;
 
-  result.innerHTML='';
-  const mode=document.querySelector('input[name="mode"]:checked').value;
-  if(mode==='map') showMap(); else showShip();
-}
+  let html = `<div class="card">`;
+  html += `<div class="card-header">🗺 ${map}</div>`;
+  html += `<img class="map-image" src="image/${map}.png" onerror="this.style.display='none'" alt="${map}">`;
 
-function showMap(){
-  const selected=mapSelect.value;
-  const nodes=mapIndex[selected];
-  if(!nodes) return;
-  let html=`<div class="card"><div class="mapTitle">${selected}</div>`;
-  html+=`<img class="mapImage" src="image/${selected}.png" onerror="this.style.display='none'">`;
-  for(const node of Object.keys(nodes).sort()){
-    html+=`<div class="nodeTitle">${node}マス</div>`;
-    for(const d of nodes[node].sort((a,b)=>a.ship.localeCompare(b.ship,'ja'))){
-      html+=`<div class="drop">${d.ship}<span class="badge">${d.type}</span><span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
+  for (const node of Object.keys(nodes).sort()) {
+    const ships = nodes[node];
+
+    // 艦種でグループ化
+    const byType = {};
+    for (const d of ships) {
+      if (!byType[d.type]) byType[d.type] = [];
+      byType[d.type].push(d);
+    }
+
+    const sortedTypes = Object.keys(byType).sort((a,b) => typeOrder(a) - typeOrder(b));
+
+    html += `<div class="node-header">◆ ノード ${node}<span class="node-ship-count">${ships.length}艦</span></div>`;
+
+    for (const type of sortedTypes) {
+      const list = byType[type].slice().sort((a,b) => jaSort(a.ship, b.ship));
+      html += `<div class="type-header">${type}</div>`;
+      for (const d of list) {
+        html += `<div class="drop-row clickable" onclick="openDetail('${esc(d.ship)}')">`;
+        html += `<span class="ship-name">${d.ship}</span>`;
+        html += `<div class="ranks">${ranksHtml(d.ranks)}</div>`;
+        html += `<span class="level-info">Lv<b>${d.lv[0]}</b> 〜 <b>${d.lv[1]}</b></span>`;
+        html += `</div>`;
+      }
     }
   }
-  html+='</div>';
-  result.innerHTML=html;
+
+  html += `</div>`;
+  $('result').innerHTML = html;
 }
 
-function showShip(){
-  const ship=shipSelect.value;
-  const drops=shipIndex[ship];
-  if(!drops) return;
-  const byMap={};
-  for(const d of drops){if(!byMap[d.map]) byMap[d.map]=[]; byMap[d.map].push(d);}  
-  let html=`<div class="card"><div class="mapTitle">${ship}</div>`;
-  if(RAW[ship].modify){
-    html+='<div class="modifyBox"><strong>改造情報</strong>';
-    for(const [k,v] of Object.entries(RAW[ship].modify)){
-      html+=`<div>${k} : Lv${v}</div>`;
-    }
-    html+='</div>';
+// ===== 詳細パネル開閉 =====
+function openDetail(ship) {
+  const panel = $('detailArea');
+  // 同じ艦を再クリックで閉じる
+  if (panel.dataset.ship === ship && panel.style.display !== 'none') {
+    closeDetail();
+    return;
   }
-  Object.keys(byMap).sort(mapSort).forEach(map=>{
-    html+=`<div class="mapTitle">${map}</div>`;
-    html+=`<img class="mapImage" src="image/${map}.png" onerror="this.style.display='none'">`;
-    for(const d of byMap[map].sort((a,b)=>a.node.localeCompare(b.node))){
-      html+=`<div class="drop">${d.node}マス <span class="rank">[${d.ranks}]</span><span class="level">Lv${d.level_min}~${d.level_max}</span></div>`;
+  panel.dataset.ship = ship;
+  panel.style.display = '';
+  panel.innerHTML = buildDetailHtml(ship);
+  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function closeDetail() {
+  const panel = $('detailArea');
+  panel.style.display = 'none';
+  panel.innerHTML = '';
+  panel.dataset.ship = '';
+}
+
+// ===== 艦名モード表示 =====
+function showShip() {
+  const ship = $('shipSelect').value;
+  if (!ship || !RAW[ship]) return;
+  $('result').innerHTML = `<div class="card">${buildDetailInner(ship)}</div>`;
+}
+
+// ===== 詳細HTML =====
+function buildDetailHtml(ship) {
+  return `<div class="detail-panel">
+    <div class="detail-close-row">
+      <span>📋 ${ship} の詳細情報</span>
+      <button class="btn-close" onclick="closeDetail()">✕ 閉じる</button>
+    </div>
+    <div style="border-radius:0;overflow:hidden">${buildDetailInner(ship)}</div>
+  </div>`;
+}
+
+function buildDetailInner(ship) {
+  const body = RAW[ship];
+  const drops = shipDropIndex[ship];
+  const buildData = BUILD[ship];
+  let html = '';
+
+  // ヘッダー
+  html += `<div class="card-header">`;
+  if (body.number) html += `<span class="ship-num">No.${body.number}</span>`;
+  html += `${ship}`;
+  html += `<span class="type-badge">${body.type || ''}</span>`;
+  html += `</div>`;
+
+  // 改造情報
+  if (body.modify && Object.keys(body.modify).length > 0) {
+    html += `<div class="modify-box">`;
+    html += `<div class="modify-title">🔧 改造情報</div>`;
+    html += `<div class="modify-items">`;
+    for (const [k, v] of Object.entries(body.modify)) {
+      html += `<span class="modify-item">${k}（Lv${v}）</span>`;
     }
-  });
-  html+='</div>';
-  result.innerHTML=html;
+    html += `</div></div>`;
+  }
+
+  // ドロップ情報
+  if (drops && Object.keys(drops).length > 0) {
+    for (const map of Object.keys(drops).sort(mapSort)) {
+      html += `<div class="map-subtitle">🗺 ${map}</div>`;
+      html += `<img class="map-image" src="image/${map}.png" onerror="this.style.display='none'" alt="${map}">`;
+      for (const node of Object.keys(drops[map]).sort()) {
+        const { ranks, lv } = drops[map][node];
+        html += `<div class="drop-row">`;
+        html += `<span class="ship-name">ノード ${node}</span>`;
+        html += `<div class="ranks">${ranksHtml(ranks)}</div>`;
+        html += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
+        html += `</div>`;
+      }
+    }
+  } else {
+    html += `<div class="no-data">ドロップデータなし</div>`;
+  }
+
+  // 建造セクション
+  html += `<div class="build-section">`;
+  html += `<div class="build-header">🔨 建造レシピ</div>`;
+
+  if (buildData?.build?.length > 0) {
+    for (const r of buildData.build) {
+      html += `<div class="recipe-block">`;
+      html += `<div class="recipe-top"><div class="recipe-vals">`;
+      r.recipe.forEach((v, i) => {
+        if (i > 0) html += `<span class="recipe-sep">/</span>`;
+        html += `<span class="recipe-cell">${v}</span>`;
+      });
+      html += `</div>`;
+      if (r.big) html += `<span class="big-badge">大型建造</span>`;
+      html += `</div>`;
+
+      html += `<div class="recipe-meta">`;
+      html += `<span>開発資材: <b>${r.Dev}</b></span>`;
+      html += `<span>試行数: <b>${r.count.toLocaleString()}</b></span>`;
+      html += `<span>確率: <b>${r.rate}%</b></span>`;
+      html += `</div>`;
+
+      if (r.ship?.length > 0) {
+        const shown = r.ship.slice(0, 30);
+        const rest  = r.ship.length - 30;
+        html += `<div class="recipe-ships"><span class="label">同レシピで来る艦：</span>`;
+        shown.forEach(s => { html += `<span class="recipe-ship-tag">${s}</span>`; });
+        if (rest > 0) html += `<span class="recipe-ship-tag">他${rest}艦…</span>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+  } else {
+    html += `<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>`;
+  }
+
+  html += `</div>`;
+  return html;
+}
+
+// ===== ユーティリティ =====
+function ranksHtml(ranks) {
+  return ranks.map(r => `<span class="rank-badge rank-${r}">${r}</span>`).join('');
+}
+
+// onclick属性用：シングルクォートをエスケープ
+function esc(s) {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 </script>
 </body>
