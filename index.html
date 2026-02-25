@@ -308,33 +308,68 @@
 
   .no-data { padding: 10px 14px; font-size: 12px; color: var(--text-sub); font-style: italic; }
 
-  /* 詳細パネル */
-  .detail-panel {
-    background: var(--surface); border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0,0,0,.15); border: 2px solid var(--blue);
-    margin-bottom: 16px; overflow: hidden;
-    animation: slideIn .15s ease;
+  /* ===== 艦娘詳細モーダル ===== */
+  #shipModal {
+    display: none;
+    position: fixed; inset: 0; z-index: 200;
+    background: rgba(10,20,40,.6);
+    align-items: flex-start;
+    justify-content: center;
+    padding: 40px 12px 20px;
+    overflow-y: auto;
   }
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateY(-6px); }
-    to   { opacity: 1; transform: translateY(0); }
+  #shipModal.open { display: flex; }
+
+  .modal-box {
+    background: var(--surface);
+    border-radius: 14px;
+    box-shadow: 0 8px 40px rgba(0,0,0,.35);
+    width: 100%; max-width: 700px;
+    overflow: hidden;
+    animation: modalIn .18s ease;
   }
-  .detail-close-row {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 7px 14px; background: #e8f0fb; border-bottom: 1px solid var(--border);
-    font-size: 12px; color: var(--text-sub); font-weight: 600;
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(-12px) scale(.98); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
   }
-  .btn-close {
-    background: none; border: 1px solid var(--border); border-radius: 5px;
-    padding: 3px 10px; font-size: 12px; color: var(--text-sub);
-    cursor: pointer; transition: all .1s; font-family: inherit;
+
+  .modal-header {
+    background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+    color: #fff;
+    padding: 10px 14px 10px 16px;
+    font-size: 16px; font-weight: 700; letter-spacing: .04em;
+    display: flex; align-items: center; gap: 8px;
   }
-  .btn-close:hover { background: #fee; border-color: #e08080; color: #c00; }
+  .modal-header .type-badge { margin-left: auto; }
+  .modal-close {
+    background: rgba(255,255,255,.15); border: none; border-radius: 5px;
+    color: #fff; font-size: 14px; padding: 2px 8px; margin-left: 8px;
+    cursor: pointer; transition: background .1s; font-family: inherit; line-height: 1.5;
+  }
+  .modal-close:hover { background: rgba(255,80,80,.5); }
+
+  /* モーダル内タブ */
+  .modal-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: #f8f9fc;
+  }
+  .modal-tab {
+    padding: 8px 16px;
+    font-size: 12px; font-weight: 700; color: var(--text-sub);
+    cursor: pointer; border-bottom: 2px solid transparent;
+    transition: all .15s; user-select: none;
+  }
+  .modal-tab.active { color: var(--navy); border-bottom-color: var(--blue); background: #fff; }
+  .modal-tab:hover:not(.active) { background: var(--blue-light); }
+
+  .modal-pane { display: none; max-height: 65vh; overflow-y: auto; }
+  .modal-pane.active { display: block; }
 
   /* 画像モーダル */
   #imgModal {
     display: none; position: fixed; inset: 0;
-    background: rgba(0,0,0,.78); z-index: 1000;
+    background: rgba(0,0,0,.78); z-index: 300;
     align-items: center; justify-content: center; cursor: pointer;
   }
   #imgModal.open { display: flex; }
@@ -383,12 +418,34 @@
     </div>
   </div>
 
-  <div id="detailArea" style="display:none"></div>
   <div id="result"></div>
 
 </div>
 
-<div id="imgModal" onclick="closeModal()">
+<!-- 艦娘詳細モーダル -->
+<div id="shipModal" onclick="onModalBgClick(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="ship-num" id="modalNum"></span>
+      <span id="modalTitle"></span>
+      <span class="type-badge" id="modalType"></span>
+      <button class="modal-close" onclick="closeShipModal()">✕</button>
+    </div>
+    <div id="modalModify" style="display:none" class="modify-box">
+      <div class="modify-title">🔧 改造情報</div>
+      <div class="modify-items" id="modalModifyItems"></div>
+    </div>
+    <div class="modal-tabs">
+      <div class="modal-tab active" id="tabDrop" onclick="switchModalTab('drop')">📋 ドロップ海域</div>
+      <div class="modal-tab" id="tabBuild" onclick="switchModalTab('build')">🔨 建造レシピ</div>
+    </div>
+    <div class="modal-pane active" id="modalDropPane"></div>
+    <div class="modal-pane" id="modalBuildPane"></div>
+  </div>
+</div>
+
+<!-- 画像拡大モーダル -->
+<div id="imgModal" onclick="closeImgModal()">
   <img id="imgModalImg" src="" alt="">
 </div>
 
@@ -472,10 +529,10 @@ document.querySelectorAll('input[name="mode"]').forEach(r => {
     const v = r.value;
     $('mapArea').style.display  = v === 'map'  ? '' : 'none';
     $('shipArea').style.display = v === 'ship' ? '' : 'none';
-    closeDetail(); update();
+    closeShipModal(); update();
   });
 });
-$('mapSelect').onchange  = () => { closeDetail(); update(); };
+$('mapSelect').onchange  = () => { closeShipModal(); update(); };
 $('shipSelect').onchange = update;
 $('typeSelect').onchange = () => { updateShipSelect(); update(); };
 
@@ -492,7 +549,7 @@ function mediaHtml(map, size) {
   const url = `https://zekamashi.net/kancolle-kouryaku/${map}/`;
   return `<div class="${cls}">
     <div class="map-media-img">
-      <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openModal(this.src)" onerror="this.style.display='none'">
+      <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openImgModal(this.src)" onerror="this.style.display='none'">
     </div>
     <div class="map-media-frame">
       <iframe src="${url}" loading="lazy" title="${map} 攻略"></iframe>
@@ -536,135 +593,118 @@ function showMap() {
   $('result').innerHTML = html;
 }
 
-// ===== 詳細パネル開閉 =====
+// ===== 艦娘詳細モーダル =====
+let currentModalTab = 'drop';
+
 function openDetail(ship) {
-  const panel = $('detailArea');
-  if (panel.dataset.ship === ship && panel.style.display !== 'none') {
-    closeDetail(); return;
-  }
-  panel.dataset.ship = ship;
-  panel.style.display = '';
-  panel.innerHTML = buildDetailHtml(ship);
-  panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-}
-function closeDetail() {
-  const panel = $('detailArea');
-  panel.style.display = 'none';
-  panel.innerHTML = '';
-  panel.dataset.ship = '';
-}
-
-// ===== 艦名モード =====
-function showShip() {
-  const ship = $('shipSelect').value;
-  if (!ship || !RAW[ship]) return;
-  $('result').innerHTML = `<div class="card">${buildDetailInner(ship)}</div>`;
-}
-
-function buildDetailHtml(ship) {
-  return `<div class="detail-panel">
-    <div class="detail-close-row">
-      <span>📋 ${ship} の詳細情報</span>
-      <button class="btn-close" onclick="closeDetail()">✕ 閉じる</button>
-    </div>
-    <div>${buildDetailInner(ship)}</div>
-  </div>`;
-}
-
-function buildDetailInner(ship) {
   const body = RAW[ship];
   const drops = shipDropIndex[ship];
   const buildData = BUILD[ship];
-  const hasBuild = buildData?.build?.length > 0;
-  let html = '';
 
-  html += `<div class="card-header">`;
-  if (body.number) html += `<span class="ship-num">No.${body.number}</span>`;
-  html += `${ship}`;
-  html += `<span class="type-badge">${body.type || ''}</span>`;
-  html += `</div>`;
+  // ヘッダー
+  $('modalNum').textContent = body.number ? 'No.' + body.number : '';
+  $('modalTitle').textContent = ship;
+  $('modalType').textContent = body.type || '';
 
+  // 改造情報
+  const modBox = $('modalModify');
   if (body.modify && Object.keys(body.modify).length > 0) {
-    html += `<div class="modify-box"><div class="modify-title">🔧 改造情報</div><div class="modify-items">`;
-    for (const [k, v] of Object.entries(body.modify)) {
-      html += `<span class="modify-item">${k}（Lv${v}）</span>`;
-    }
-    html += `</div></div>`;
+    $('modalModifyItems').innerHTML = Object.entries(body.modify)
+      .map(([k,v]) => `<span class="modify-item">${k}（Lv${v}）</span>`).join('');
+    modBox.style.display = '';
+  } else {
+    modBox.style.display = 'none';
   }
 
+  // ドロップペイン
+  let dropHtml = '';
   if (drops && Object.keys(drops).length > 0) {
     for (const map of Object.keys(drops).sort(mapSort)) {
-      html += `<div class="map-subtitle">🗺 ${map}</div>`;
-      html += mediaHtml(map, 'sm');
+      dropHtml += `<div class="map-subtitle">🗺 ${map}</div>`;
+      dropHtml += mediaHtml(map, 'sm');
       for (const node of Object.keys(drops[map]).sort()) {
         const { ranks, lv } = drops[map][node];
-        html += `<div class="drop-row">`;
-        html += `<span class="ship-name">ノード ${node}</span>`;
-        html += `<div class="ranks">${ranksHtml(ranks)}</div>`;
-        html += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
-        html += `</div>`;
+        dropHtml += `<div class="drop-row">`;
+        dropHtml += `<span class="ship-name">ノード ${node}</span>`;
+        dropHtml += `<div class="ranks">${ranksHtml(ranks)}</div>`;
+        dropHtml += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
+        dropHtml += `</div>`;
       }
     }
   } else {
-    html += `<div class="no-data">ドロップデータなし</div>`;
+    dropHtml = '<div class="no-data">ドロップデータなし</div>';
   }
+  $('modalDropPane').innerHTML = dropHtml;
 
-  // 建造（折りたたみ）
-  const bid = 'build_' + ship.replace(/[^a-zA-Z0-9]/g, '_');
-  html += `<div class="build-toggle" onclick="toggleBuild('${bid}')">`;
-  html += `🔨 建造レシピ`;
-  html += hasBuild
-    ? `<span style="font-weight:400;font-size:11px;margin-left:4px;">${buildData.build.length}件</span>`
-    : `<span style="font-weight:400;font-size:11px;margin-left:4px;color:#b88">データなし</span>`;
-  html += `<span class="chevron">▼</span></div>`;
-
-  html += `<div class="build-body" id="${bid}">`;
-  if (hasBuild) {
+  // 建造ペイン
+  let buildHtml = '';
+  if (buildData?.build?.length > 0) {
     for (const r of buildData.build) {
-      html += `<div class="recipe-block">`;
-      html += `<div class="recipe-top"><div class="recipe-vals">`;
+      buildHtml += `<div class="recipe-block">`;
+      buildHtml += `<div class="recipe-top"><div class="recipe-vals">`;
       r.recipe.forEach((v, i) => {
-        if (i > 0) html += `<span class="recipe-sep">/</span>`;
-        html += `<span class="recipe-cell">${v}</span>`;
+        if (i > 0) buildHtml += `<span class="recipe-sep">/</span>`;
+        buildHtml += `<span class="recipe-cell">${v}</span>`;
       });
-      html += `</div>`;
-      if (r.big) html += `<span class="big-badge">大型建造</span>`;
-      html += `</div>`;
-      html += `<div class="recipe-meta">`;
-      html += `<span>開発資材: <b>${r.Dev}</b></span>`;
-      html += `<span>試行数: <b>${r.count.toLocaleString()}</b></span>`;
-      html += `<span>確率: <b>${r.rate}%</b></span>`;
-      html += `</div>`;
+      buildHtml += `</div>`;
+      if (r.big) buildHtml += `<span class="big-badge">大型建造</span>`;
+      buildHtml += `</div>`;
+      buildHtml += `<div class="recipe-meta">`;
+      buildHtml += `<span>開発資材: <b>${r.Dev}</b></span>`;
+      buildHtml += `<span>試行数: <b>${r.count.toLocaleString()}</b></span>`;
+      buildHtml += `<span>確率: <b>${r.rate}%</b></span>`;
+      buildHtml += `</div>`;
       if (r.ship?.length > 0) {
         const shown = r.ship.slice(0, 30);
-        const rest  = r.ship.length - 30;
-        html += `<div class="recipe-ships"><span class="label">同レシピで来る艦：</span>`;
-        shown.forEach(s => { html += `<span class="recipe-ship-tag">${s}</span>`; });
-        if (rest > 0) html += `<span class="recipe-ship-tag">他${rest}艦…</span>`;
-        html += `</div>`;
+        const rest = r.ship.length - 30;
+        buildHtml += `<div class="recipe-ships"><span class="label">同レシピで来る艦：</span>`;
+        shown.forEach(s => { buildHtml += `<span class="recipe-ship-tag">${s}</span>`; });
+        if (rest > 0) buildHtml += `<span class="recipe-ship-tag">他${rest}艦…</span>`;
+        buildHtml += `</div>`;
       }
-      html += `</div>`;
+      buildHtml += `</div>`;
     }
   } else {
-    html += `<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>`;
+    buildHtml = '<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>';
   }
-  html += `</div>`;
+  $('modalBuildPane').innerHTML = buildHtml;
 
-  return html;
+  // タブをドロップに戻してから開く
+  switchModalTab('drop');
+  $('shipModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
 }
 
-function toggleBuild(id) {
-  const body = document.getElementById(id);
-  if (!body) return;
-  const open = body.classList.toggle('open');
-  body.previousElementSibling.classList.toggle('open', open);
+function closeShipModal() {
+  $('shipModal').classList.remove('open');
+  document.body.style.overflow = '';
 }
 
-function openModal(src) {
+function onModalBgClick(e) {
+  if (e.target === $('shipModal')) closeShipModal();
+}
+
+function switchModalTab(tab) {
+  currentModalTab = tab;
+  $('tabDrop').classList.toggle('active', tab === 'drop');
+  $('tabBuild').classList.toggle('active', tab === 'build');
+  $('modalDropPane').classList.toggle('active', tab === 'drop');
+  $('modalBuildPane').classList.toggle('active', tab === 'build');
+}
+
+// ===== 艦名モード（モーダルを直接開く） =====
+function showShip() {
+  const ship = $('shipSelect').value;
+  if (!ship || !RAW[ship]) return;
+  openDetail(ship);
+}
+
+
+function openImgModal(src) {
   $('imgModalImg').src = src;
   $('imgModal').classList.add('open');
 }
-function closeModal() { $('imgModal').classList.remove('open'); }
+function closeImgModal() { $('imgModal').classList.remove('open'); }
 
 function ranksHtml(ranks) {
   return ranks.map(r => `<span class="rank-badge rank-${r}">${r}</span>`).join('');
