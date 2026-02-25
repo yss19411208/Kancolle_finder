@@ -118,89 +118,46 @@
    border-radius: 4px; padding: 2px 7px; margin-left: auto; font-weight: 400;
   }
 
-  /* ===== 画像 + iframe 横並び ===== */
-  .map-media {
-   display: flex;
-   border-bottom: 1px solid var(--border);
-   background: #f8f9fc;
+  /* ===== マップ画像ブロック ===== */
+  .map-media, .map-media-sm {
+    background: #f4f6fb;
+    border-bottom: 1px solid var(--border);
+    padding: 12px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
   }
-
-  /* 左：画像（300×180固定） */
-  .map-media-img {
-   flex: 1;
-   border-right: 1px solid var(--border);
-   position: relative;
-   overflow: hidden;
-   background: #e8edf5;
+  .map-media img, .map-media-sm img {
+    display: block;
+    width: 600px;
+    max-width: 100%;
+    height: auto;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    transition: opacity .15s;
+    box-shadow: 0 2px 8px rgba(0,0,0,.1);
   }
-  .map-media-img img {
-   width: 100%;
-   height: 320px;
-   object-fit: cover;
-   display: block;
-   cursor: pointer;
-   transition: opacity .15s;
+  .map-media img:hover, .map-media-sm img:hover { opacity: .88; }
+  .map-media-sm img {
+    width: 400px;
   }
-  .map-media-img img:hover { opacity: .85; }
-  .map-media-img .no-img {
-   width: 100%; height: 320px;
-   display: flex; align-items: center; justify-content: center;
-   font-size: 12px; color: var(--text-sub);
+  .map-kouryaku-btn {
+    display: inline-block;
+    padding: 6px 18px;
+    background: var(--navy);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .04em;
+    transition: background .15s;
+    font-family: inherit;
   }
-
-  /* 右：iframe（残り幅 × 280px高さ） */
-  .map-media-frame {
-   flex: 1;
-   min-width: 0;
-   position: relative;
-  }
-  .map-media-frame iframe {
-   width: 100%;
-   height: 320px;
-   border: none;
-   display: block;
-  }
-  .map-media-frame .frame-label {
-   position: absolute;
-   top: 4px; right: 6px;
-   font-size: 10px;
-   color: var(--text-sub);
-   background: rgba(255,255,255,.8);
-   padding: 1px 5px;
-   border-radius: 3px;
-   pointer-events: none;
-  }
-  .map-media-link {
-   display: block;
-   padding: 4px 10px;
-   font-size: 11px;
-   background: var(--blue-light);
-   border-top: 1px solid var(--border);
-   color: var(--blue);
-   text-decoration: none;
-   text-align: right;
-  }
-  .map-media-link:hover { background: #d0e4f8; }
-
-  /* 艦名モード用：小さめ横並び */
-  .map-media-sm {
-   display: flex;
-   border-bottom: 1px solid var(--border);
-   background: #f8f9fc;
-  }
-  .map-media-sm .map-media-img {
-   flex: 1;
-  }
-  .map-media-sm .map-media-img img {
-   width: 100%;
-   height: 240px;
-  }
-  .map-media-sm .map-media-img .no-img {
-   width: 100%; height: 240px;
-  }
-  .map-media-sm .map-media-frame iframe {
-   height: 240px;
-  }
+  .map-kouryaku-btn:hover { background: var(--navy2); }
 
   /* ノード・艦種 */
   .node-header {
@@ -426,6 +383,38 @@
    border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.5);
   }
 
+  /* 攻略ページ iframe モーダル */
+  #kouryakuModal {
+    display: none; position: fixed; inset: 0; z-index: 310;
+    background: rgba(10,20,40,.7);
+    align-items: center; justify-content: center;
+    padding: 20px 12px;
+  }
+  #kouryakuModal.open { display: flex; }
+  .kouryaku-modal-box {
+    background: #fff; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 8px 40px rgba(0,0,0,.4);
+    width: 100%; max-width: 860px;
+    display: flex; flex-direction: column; max-height: 90vh;
+  }
+  .kouryaku-modal-bar {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 14px;
+    background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+    color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0;
+  }
+  .kouryaku-modal-bar a {
+    color: rgba(255,255,255,.75); font-size: 11px; font-weight: 400;
+    text-decoration: underline; margin-left: auto;
+  }
+  .kouryaku-modal-bar button {
+    background: rgba(255,255,255,.15); border: none; border-radius: 5px;
+    color: #fff; font-size: 13px; padding: 2px 10px;
+    cursor: pointer; font-family: inherit;
+  }
+  .kouryaku-modal-bar button:hover { background: rgba(255,80,80,.5); }
+  #kouryakuIframe { width: 100%; flex: 1; border: none; min-height: 520px; }
+
   @media (max-width: 640px) {
    .map-media, .map-media-sm { flex-direction: column; }
    .map-media-img, .map-media-sm .map-media-img { flex: none; border-right: none; border-bottom: 1px solid var(--border); }
@@ -495,6 +484,18 @@
 <!-- 画像拡大モーダル -->
 <div id="imgModal" onclick="closeImgModal()">
   <img id="imgModalImg" src="" alt="">
+</div>
+
+<!-- 攻略ページ モーダル -->
+<div id="kouryakuModal" onclick="onKouryakuBgClick(event)">
+  <div class="kouryaku-modal-box">
+    <div class="kouryaku-modal-bar">
+      <span id="kouryakuTitle">攻略ページ</span>
+      <a id="kouryakuLink" href="" target="_blank">別タブで開く ↗</a>
+      <button onclick="closeKouryakuModal()">✕ 閉じる</button>
+    </div>
+    <iframe id="kouryakuIframe" src="" loading="lazy"></iframe>
+  </div>
 </div>
 
 <script>
@@ -590,19 +591,13 @@ function update() {
   if (mode === 'map') showMap(); else showShip();
 }
 
-// ===== 画像+iframe 横並びブロックHTML生成 =====
-// size: 'lg'(300x180) or 'sm'(200x120)
+// ===== マップ画像 + 攻略ボタン =====
 function mediaHtml(map, size) {
   const cls = size === 'sm' ? 'map-media-sm' : 'map-media';
-  const url = `https://zekamashi.net/kancolle-kouryaku/${map}/`;
+  const mesc = map.replace(/'/g, "\'");
   return `<div class="${cls}">
-   <div class="map-media-img">
-     <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openImgModal(this.src)" onerror="this.style.display='none'">
-   </div>
-   <div class="map-media-frame">
-     <iframe src="${url}" loading="lazy" title="${map} 攻略"></iframe>
-     <a class="map-media-link" href="${url}" target="_blank">攻略ページを別タブで開く ↗</a>
-   </div>
+    <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openImgModal(this.src)" onerror="this.style.display='none'">
+    <button class="map-kouryaku-btn" onclick="openKouryakuModal('${mesc}')">攻略ページを開く</button>
   </div>`;
 }
 
@@ -850,6 +845,23 @@ function openImgModal(src) {
   $('imgModal').classList.add('open');
 }
 function closeImgModal() { $('imgModal').classList.remove('open'); }
+
+function openKouryakuModal(map) {
+  const url = `https://zekamashi.net/kancolle-kouryaku/${map}/`;
+  $('kouryakuTitle').textContent = map + ' 攻略ページ';
+  $('kouryakuLink').href = url;
+  $('kouryakuIframe').src = url;
+  $('kouryakuModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeKouryakuModal() {
+  $('kouryakuModal').classList.remove('open');
+  $('kouryakuIframe').src = '';
+  document.body.style.overflow = '';
+}
+function onKouryakuBgClick(e) {
+  if (e.target === $('kouryakuModal')) closeKouryakuModal();
+}
 
 function ranksHtml(ranks) {
   return ranks.map(r => `<span class="rank-badge rank-${r}">${r}</span>`).join('');
