@@ -308,6 +308,42 @@
 
   .no-data { padding: 10px 14px; font-size: 12px; color: var(--text-sub); font-style: italic; }
 
+  /* 建造レシピ ソートテーブル */
+  .build-table-wrap { overflow-x: auto; }
+  .build-table {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  .build-table th {
+    background: #fef3d0;
+    padding: 7px 10px;
+    text-align: left; font-size: 12px; font-weight: 700; color: #7a4e00;
+    border-bottom: 2px solid #e8c84a;
+    white-space: nowrap; cursor: pointer; user-select: none;
+  }
+  .build-table th:hover { background: #fde9a0; }
+  .build-table th .sort-icon { margin-left: 4px; font-size: 10px; color: #b89030; }
+  .build-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #faf0d0;
+    vertical-align: top;
+  }
+  .build-table tr:last-child td { border-bottom: none; }
+  .build-table tr:hover td { background: #fffbf0; }
+  .recipe-vals-inline { display: flex; gap: 3px; align-items: center; flex-wrap: wrap; }
+  .recipe-cell-sm {
+    background: #fffbf0; border: 1px solid #ddc870; border-radius: 4px;
+    padding: 2px 6px; font-size: 12px; font-weight: 700; color: #6b4a00;
+    min-width: 30px; text-align: center;
+  }
+  .recipe-sep-sm { color: #bba050; font-size: 10px; }
+  .recipe-ships-inline {
+    font-size: 11px; color: var(--text-sub);
+    display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px;
+  }
+  .recipe-ship-tag {
+    background: #f5f5f5; border: 1px solid #ddd; border-radius: 3px; padding: 1px 5px; color: #555; font-size: 11px;
+  }
+
   /* ===== 艦娘詳細モーダル ===== */
   #shipModal {
    display: none;
@@ -636,38 +672,8 @@ function openDetail(ship) {
   }
   $('modalDropPane').innerHTML = dropHtml;
 
-  // 建造ペイン
-  let buildHtml = '';
-  if (buildData?.build?.length > 0) {
-   for (const r of buildData.build) {
-     buildHtml += `<div class="recipe-block">`;
-     buildHtml += `<div class="recipe-top"><div class="recipe-vals">`;
-     r.recipe.forEach((v, i) => {
-       if (i > 0) buildHtml += `<span class="recipe-sep">/</span>`;
-       buildHtml += `<span class="recipe-cell">${v}</span>`;
-     });
-     buildHtml += `</div>`;
-     if (r.big) buildHtml += `<span class="big-badge">大型建造</span>`;
-     buildHtml += `</div>`;
-     buildHtml += `<div class="recipe-meta">`;
-     buildHtml += `<span>開発資材: <b>${r.Dev}</b></span>`;
-     buildHtml += `<span>試行数: <b>${r.count.toLocaleString()}</b></span>`;
-     buildHtml += `<span>確率: <b>${r.rate}%</b></span>`;
-     buildHtml += `</div>`;
-     if (r.ship?.length > 0) {
-       const shown = r.ship.slice(0, 30);
-       const rest = r.ship.length - 30;
-       buildHtml += `<div class="recipe-ships"><span class="label">同レシピで来る艦：</span>`;
-       shown.forEach(s => { buildHtml += `<span class="recipe-ship-tag">${s}</span>`; });
-       if (rest > 0) buildHtml += `<span class="recipe-ship-tag">他${rest}艦…</span>`;
-       buildHtml += `</div>`;
-     }
-     buildHtml += `</div>`;
-   }
-  } else {
-   buildHtml = '<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>';
-  }
-  $('modalBuildPane').innerHTML = buildHtml;
+  // 建造ペイン（ソートテーブル）
+  $('modalBuildPane').innerHTML = buildRecipeTable(ship, buildData);
 
   // タブをドロップに戻してから開く
   switchModalTab('drop');
@@ -692,13 +698,139 @@ function switchModalTab(tab) {
   $('modalBuildPane').classList.toggle('active', tab === 'build');
 }
 
-// ===== 艦名モード（モーダルを直接開く） =====
+// ===== 艦名モード（ページ内表示） =====
 function showShip() {
   const ship = $('shipSelect').value;
   if (!ship || !RAW[ship]) return;
-  openDetail(ship);
+  const body = RAW[ship];
+  const drops = shipDropIndex[ship];
+  const buildData = BUILD[ship];
+
+  let html = `<div class="card">`;
+
+  // ヘッダー
+  html += `<div class="card-header">`;
+  if (body.number) html += `<span class="ship-num">No.${body.number}</span>`;
+  html += `${ship}<span class="type-badge">${body.type || ''}</span></div>`;
+
+  // 改造情報
+  if (body.modify && Object.keys(body.modify).length > 0) {
+    html += `<div class="modify-box"><div class="modify-title">改造情報</div><div class="modify-items">`;
+    for (const [k, v] of Object.entries(body.modify)) {
+      html += `<span class="modify-item">${k}（Lv${v}）</span>`;
+    }
+    html += `</div></div>`;
+  }
+
+  // ドロップ海域
+  if (drops && Object.keys(drops).length > 0) {
+    for (const map of Object.keys(drops).sort(mapSort)) {
+      html += `<div class="map-subtitle">${map}</div>`;
+      html += mediaHtml(map, 'sm');
+      for (const node of Object.keys(drops[map]).sort()) {
+        const { ranks, lv } = drops[map][node];
+        html += `<div class="drop-row">`;
+        html += `<span class="ship-name">ノード ${node}</span>`;
+        html += `<div class="ranks">${ranksHtml(ranks)}</div>`;
+        html += `<span class="level-info">Lv<b>${lv[0]}</b> 〜 <b>${lv[1]}</b></span>`;
+        html += `</div>`;
+      }
+    }
+  } else {
+    html += `<div class="no-data">ドロップデータなし</div>`;
+  }
+
+  // 建造レシピ（ソートテーブル）
+  html += buildRecipeTable(ship, buildData);
+
+  html += `</div>`;
+  $('result').innerHTML = html;
 }
 
+
+// ===== 建造レシピ ソートテーブル =====
+let recipeSortState = {}; // ship -> { col, asc }
+
+function buildRecipeTable(ship, buildData) {
+  if (!buildData?.build?.length) {
+    return '<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>';
+  }
+  const state = recipeSortState[ship] || { col: null, asc: true };
+  const recipes = buildData.build.slice();
+
+  // ソート
+  if (state.col !== null) {
+    recipes.sort((a, b) => {
+      let va, vb;
+      if (state.col === 'recipe') {
+        va = a.recipe.reduce((s,v) => s+v, 0);
+        vb = b.recipe.reduce((s,v) => s+v, 0);
+      } else if (state.col === 'Dev') {
+        va = a.Dev; vb = b.Dev;
+      } else if (state.col === 'count') {
+        va = a.count; vb = b.count;
+      } else if (state.col === 'rate') {
+        va = a.rate; vb = b.rate;
+      }
+      return state.asc ? va - vb : vb - va;
+    });
+  }
+
+  const cols = [
+    { key: 'recipe', label: '燃/弾/鋼/ボ' },
+    { key: 'Dev',    label: '開発資材' },
+    { key: 'count',  label: '試行数' },
+    { key: 'rate',   label: '確率' },
+  ];
+
+  const sesc = ship.replace(/"/g, '&quot;').replace(/'/g, "\'");
+
+  let html = `<div class="build-table-wrap"><table class="build-table"><thead><tr>`;
+  for (const c of cols) {
+    const active = state.col === c.key;
+    const icon = active ? (state.asc ? '▲' : '▼') : '⇅';
+    html += `<th onclick="sortRecipeTable('${sesc}','${c.key}')">${c.label}<span class="sort-icon">${icon}</span></th>`;
+  }
+  html += `<th>同時に来る艦</th></tr></thead><tbody>`;
+
+  for (const r of recipes) {
+    const recipeStr = r.recipe.map((v,i) => {
+      const sep = i > 0 ? `<span class="recipe-sep-sm">/</span>` : '';
+      return `${sep}<span class="recipe-cell-sm">${v}</span>`;
+    }).join('');
+    const shipList = (r.ship||[]).slice(0,20).map(s => `<span class="recipe-ship-tag">${s}</span>`).join('');
+    const rest = (r.ship||[]).length > 20 ? `<span class="recipe-ship-tag">他${r.ship.length-20}艦…</span>` : '';
+    const bigBadge = r.big ? `<span class="big-badge" style="margin-left:4px">大型</span>` : '';
+
+    html += `<tr>
+      <td><div class="recipe-vals-inline">${recipeStr}</div>${bigBadge}</td>
+      <td>${r.Dev}</td>
+      <td>${r.count.toLocaleString()}</td>
+      <td>${r.rate}%</td>
+      <td><div class="recipe-ships-inline">${shipList}${rest}</div></td>
+    </tr>`;
+  }
+
+  html += `</tbody></table></div>`;
+  return html;
+}
+
+function sortRecipeTable(ship, col) {
+  const state = recipeSortState[ship] || { col: null, asc: true };
+  if (state.col === col) {
+    recipeSortState[ship] = { col, asc: !state.asc };
+  } else {
+    recipeSortState[ship] = { col, asc: true };
+  }
+  // 艦名モード（ページ内）なら再描画
+  const mode = document.querySelector('input[name="mode"]:checked').value;
+  if (mode === 'ship') {
+    showShip();
+  } else {
+    // モーダル内の建造タブを再描画
+    $('modalBuildPane').innerHTML = buildRecipeTable(ship, BUILD[ship]);
+  }
+}
 
 function openImgModal(src) {
   $('imgModalImg').src = src;
