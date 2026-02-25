@@ -391,11 +391,16 @@
     padding: 20px 12px;
   }
   #kouryakuModal.open { display: flex; }
-  .kouryaku-modal-box {
-    background: #fff; border-radius: 12px; overflow: hidden;
+    .kouryaku-modal-box {
+    background: #fff;
+    border-radius: 12px;
+    overflow: hidden;
     box-shadow: 0 8px 40px rgba(0,0,0,.4);
-    width: 100%; max-width: 1400px;
-    display: flex; flex-direction: column; max-height: 95vh;
+    width: 96%;
+    height: 95vh;
+    max-width: none;
+    display: flex;
+    flex-direction: column;
   }
   .kouryaku-modal-bar {
     display: flex; align-items: center; gap: 12px;
@@ -413,7 +418,12 @@
     cursor: pointer; font-family: inherit;
   }
   .kouryaku-modal-bar button:hover { background: rgba(255,80,80,.5); }
-  #kouryakuIframe { width: 100%; flex: 1; border: none; height: 100%; }
+  #kouryakuIframe {
+    width: 100%;
+    height: 100%;
+    flex: 1;
+    border: none;
+  }
 
   @media (max-width: 640px) {
    .map-media, .map-media-sm { flex-direction: column; }
@@ -872,5 +882,6 @@ function esc(s) {
 </script>
 </body>
 </html>
+
 
 
