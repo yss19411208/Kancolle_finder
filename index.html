@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>艦これ ドロップ検索</title>
+<style>
+:root {
+  --bg: #eef2f8;
+  --surface: #ffffff;
+  --navy: #1a2e54;
+  --navy2: #26437a;
+  --blue: #2e6dbb;
+  --blue-light: #e4edf9;
+  --border: #ccd5e8;
+  --text: #18243c;
+  --text-sub: #566480;
+  --shadow: 0 2px 10px rgba(0,0,0,.10);
+  --shadow-sm: 0 1px 4px rgba(0,0,0,.07);
+  --radius: 10px;
+  --special: #c05000;
+  --special-bg: #fff3eb;
+  --special-bd: #f0a070;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.6;
+}
+
+/* ローディング */
+#loading {
+  position: fixed; inset: 0; background: var(--navy);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  z-index: 999; transition: opacity .4s;
+}
+#loading.hidden { opacity: 0; pointer-events: none; }
+.loading-title { color: #fff; font-size: 18px; font-weight: 700; letter-spacing: .1em; }
+.loading-bar-wrap { width: 200px; height: 4px; background: rgba(255,255,255,.2); border-radius: 2px; overflow: hidden; }
+.loading-bar { height: 100%; background: #fff; border-radius: 2px; animation: loadpulse 1.2s ease-in-out infinite; }
+@keyframes loadpulse { 0%{width:0%} 50%{width:80%} 100%{width:100%} }
+
+/* ヘッダー */
+header {
+  background: linear-gradient(135deg, var(--navy) 0%, var(--navy2) 100%);
+  color: #fff; padding: 14px 20px; text-align: center;
+  font-size: 18px; font-weight: 700; letter-spacing: .08em;
+  box-shadow: 0 2px 10px rgba(0,0,0,.28);
+  position: sticky; top: 0; z-index: 100;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+}
+header .sub { opacity: .5; font-size: 11px; font-weight: 400; letter-spacing: .04em; }
+.header-stats { font-size: 11px; opacity: .55; font-weight: 400; margin-left: auto; }
+
+.container { max-width: 1000px; margin: 0 auto; padding: 16px 14px 80px; }
+
+/* モード切替 */
+.mode-tabs {
+  display: flex; background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 12px;
+  border: 1px solid var(--border);
+}
+.mode-tabs label {
+  flex: 1; text-align: center; padding: 11px 8px;
+  cursor: pointer; font-weight: 600; color: var(--text-sub);
+  transition: all .15s; user-select: none; font-size: 13px;
+  border-right: 1px solid var(--border);
+}
+.mode-tabs label:last-of-type { border-right: none; }
+.mode-tabs input { display: none; }
+.mode-tabs input:checked + label { background: var(--navy); color: #fff; }
+.mode-tabs label:hover { background: var(--blue-light); }
+.mode-tabs input:checked + label:hover { background: var(--navy2); }
+
+/* 検索パネル */
+.search-box {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow-sm); border: 1px solid var(--border);
+  padding: 12px 14px; margin-bottom: 12px;
+}
+.notice {
+  font-size: 12px; color: var(--text-sub); margin-bottom: 10px;
+  padding-left: 8px; border-left: 3px solid var(--border); line-height: 1.5;
+}
+
+/* 世界フィルター */
+.world-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.world-btn {
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; font-size: 12px; font-weight: 700; color: var(--text-sub);
+  cursor: pointer; transition: all .15s; font-family: inherit;
+}
+.world-btn:hover { background: var(--blue-light); border-color: var(--blue); color: var(--navy); }
+.world-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+/* ソースフィルター */
+.src-filter { display: flex; gap: 6px; }
+.src-btn {
+  padding: 5px 12px; border-radius: 6px; border: 1px solid var(--border);
+  background: #fff; font-size: 12px; font-weight: 600; color: var(--text-sub);
+  cursor: pointer; transition: all .15s; font-family: inherit;
+}
+.src-btn:hover { background: var(--blue-light); }
+.src-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+.src-btn.active.spec { background: var(--special); border-color: var(--special); }
+
+/* 行コントロール */
+.ctrl-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ctrl-row select, .ctrl-row input[type=text] {
+  flex: 1; min-width: 140px; padding: 9px 12px;
+  border-radius: 8px; border: 1px solid var(--border); background: #fff;
+  font-size: 14px; color: var(--text); outline: none; cursor: pointer;
+  transition: border-color .15s; font-family: inherit;
+}
+.ctrl-row select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23566480' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 30px;
+}
+.ctrl-row select:focus, .ctrl-row input[type=text]:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(46,109,187,.12); }
+input[type=text]::placeholder { color: #a0aab8; }
+
+.search-clear {
+  padding: 9px 14px; border-radius: 8px; border: 1px solid var(--border);
+  background: #fff; color: var(--text-sub); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all .15s; font-family: inherit; white-space: nowrap;
+  flex-shrink: 0;
+}
+.search-clear:hover { background: #fee; border-color: #f88; color: #c00; }
+
+/* カード */
+.card {
+  background: var(--surface); border-radius: var(--radius);
+  box-shadow: var(--shadow); border: 1px solid var(--border);
+  margin-bottom: 14px; overflow: hidden;
+}
+.card-header {
+  background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+  color: #fff; padding: 10px 14px; font-size: 15px; font-weight: 700;
+  letter-spacing: .04em; display: flex; align-items: center; gap: 8px;
+}
+.type-badge {
+  font-size: 11px; background: rgba(255,255,255,.18);
+  border-radius: 4px; padding: 2px 8px; margin-left: auto; font-weight: 400;
+}
+
+/* マップ画像 */
+.map-media, .map-media-sm {
+  background: #f4f7fb; border-bottom: 1px solid var(--border);
+  padding: 10px 12px; display: flex; flex-direction: column; align-items: center; gap: 7px;
+}
+.map-media img, .map-media-sm img {
+  display: block; width: 600px; max-width: 100%; height: auto;
+  border-radius: 6px; border: 1px solid var(--border);
+  cursor: pointer; transition: opacity .15s; box-shadow: 0 2px 8px rgba(0,0,0,.10);
+}
+.map-media img:hover, .map-media-sm img:hover { opacity: .85; }
+.map-media-sm img { width: 400px; }
+.map-kouryaku-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 16px; background: var(--navy); color: #fff;
+  border: none; border-radius: 6px; font-size: 12px; font-weight: 700;
+  cursor: pointer; letter-spacing: .04em; transition: background .15s; font-family: inherit;
+}
+.map-kouryaku-btn:hover { background: var(--blue); }
+
+/* ノード・艦種ヘッダー */
+.node-header {
+  background: var(--blue-light); padding: 6px 14px;
+  font-size: 12px; font-weight: 700; color: var(--navy2); letter-spacing: .06em;
+  border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 6px;
+}
+.node-ship-count {
+  font-size: 11px; font-weight: 400; color: var(--text-sub); margin-left: auto;
+  background: rgba(46,109,187,.1); padding: 1px 8px; border-radius: 10px;
+}
+.type-header {
+  background: #f7f9fd; padding: 3px 20px;
+  font-size: 11px; font-weight: 700; color: var(--navy2);
+  letter-spacing: .08em; border-bottom: 1px solid #e8edf6;
+}
+
+/* ドロップ行 */
+.drop-row {
+  display: flex; align-items: center;
+  padding: 7px 14px; border-bottom: 1px solid #eef1f8;
+  gap: 8px; flex-wrap: wrap; transition: background .1s;
+}
+.drop-row:last-child { border-bottom: none; }
+.drop-row.clickable { cursor: pointer; }
+.drop-row.clickable:hover { background: #edf4fb; }
+.drop-row.clickable:hover .ship-name { color: var(--blue); }
+.ship-name { font-weight: 700; font-size: 14px; color: var(--navy); min-width: 90px; }
+
+/* 特殊ドロップバッジ */
+.src-badge {
+  font-size: 10px; font-weight: 700; border-radius: 3px; padding: 1px 6px;
+  border: 1px solid; letter-spacing: .04em; flex-shrink: 0;
+}
+.src-badge.special { color: var(--special); background: var(--special-bg); border-color: var(--special-bd); }
+
+/* 海域チップ */
+.map-chip-list {
+  display: flex; flex-wrap: wrap; gap: 5px;
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  background: #fafbfd;
+}
+.map-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--blue-light); border: 1px solid #b8d0f0;
+  border-radius: 6px; padding: 5px 10px;
+  font-size: 13px; font-weight: 600; color: var(--navy2);
+  cursor: pointer; transition: all .15s; user-select: none;
+}
+.map-chip:hover { background: var(--blue); color: #fff; border-color: var(--blue); }
+.map-chip .nodes {
+  font-size: 11px; font-weight: 400; color: var(--text-sub);
+  background: rgba(255,255,255,.7); border-radius: 3px; padding: 0 5px;
+}
+.map-chip:hover .nodes { color: rgba(255,255,255,.85); background: rgba(255,255,255,.15); }
+.map-chip.special-chip {
+  background: var(--special-bg); border-color: var(--special-bd); color: var(--special);
+}
+.map-chip.special-chip:hover { background: var(--special); color: #fff; border-color: var(--special); }
+.map-chip.special-chip .nodes { color: var(--special); }
+.map-chip.special-chip:hover .nodes { color: rgba(255,255,255,.85); }
+
+/* 海域モード：マップ見出し */
+.map-subtitle {
+  background: #f4f7fb; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  padding: 6px 14px; font-size: 13px; font-weight: 700; color: var(--navy2);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+
+/* 艦名検索結果 */
+.result-count {
+  font-size: 12px; color: var(--text-sub); padding: 8px 4px; font-weight: 400;
+}
+.hint-box {
+  background: var(--surface); border-radius: var(--radius);
+  border: 1px solid var(--border); padding: 20px;
+  text-align: center; color: var(--text-sub); font-size: 13px;
+}
+
+.no-data { padding: 16px; font-size: 13px; color: var(--text-sub); font-style: italic; text-align: center; }
+
+/* 艦娘詳細モーダル */
+#shipModal {
+  display: none; position: fixed; inset: 0; z-index: 200;
+  background: rgba(10,20,40,.55); align-items: flex-start; justify-content: center;
+  padding: 36px 12px 20px; overflow-y: auto; backdrop-filter: blur(2px);
+}
+#shipModal.open { display: flex; }
+.modal-box {
+  background: var(--surface); border-radius: 14px;
+  box-shadow: 0 10px 48px rgba(0,0,0,.32);
+  width: 100%; max-width: 700px; overflow: hidden;
+  animation: modalIn .18s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(-8px) scale(.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-header {
+  background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+  color: #fff; padding: 10px 14px;
+  font-size: 16px; font-weight: 700; letter-spacing: .04em;
+  display: flex; align-items: center; gap: 8px;
+}
+.modal-header .type-badge { margin-left: auto; }
+.modal-close {
+  background: rgba(255,255,255,.15); border: none; border-radius: 5px;
+  color: #fff; font-size: 13px; padding: 3px 10px; margin-left: 8px;
+  cursor: pointer; transition: background .1s; font-family: inherit;
+}
+.modal-close:hover { background: rgba(255,60,60,.55); }
+.modal-body { max-height: 75vh; overflow-y: auto; }
+
+/* 画像拡大モーダル */
+#imgModal {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,.80); z-index: 300;
+  align-items: center; justify-content: center; cursor: pointer;
+}
+#imgModal.open { display: flex; }
+#imgModal img { width: 600px; height: 360px; object-fit: cover; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+
+/* 攻略ページモーダル */
+#kouryakuModal {
+  display: none; position: fixed; inset: 0; z-index: 310;
+  background: rgba(10,20,40,.7); align-items: center; justify-content: center; padding: 16px 12px;
+}
+#kouryakuModal.open { display: flex; }
+.kouryaku-modal-box {
+  background: #fff; border-radius: 12px; overflow: hidden;
+  box-shadow: 0 8px 40px rgba(0,0,0,.4); width: 96%; height: 96vh; display: flex; flex-direction: column;
+}
+.kouryaku-modal-bar {
+  display: flex; align-items: center; gap: 10px; padding: 8px 14px;
+  background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+  color: #fff; font-size: 13px; font-weight: 700; flex-shrink: 0;
+}
+.kouryaku-modal-bar a { color: rgba(255,255,255,.75); font-size: 11px; font-weight: 400; text-decoration: underline; margin-left: auto; }
+.kouryaku-modal-bar button {
+  background: rgba(255,255,255,.15); border: none; border-radius: 5px;
+  color: #fff; font-size: 13px; padding: 3px 12px; cursor: pointer; font-family: inherit; transition: background .1s;
+}
+.kouryaku-modal-bar button:hover { background: rgba(255,60,60,.55); }
+#kouryakuIframe { width: 100%; flex: 1; border: none; }
+
+@media (max-width: 640px) {
+  .ctrl-row { flex-direction: column; }
+  .map-media img, .map-media-sm img { width: 100%; }
+  header { font-size: 15px; padding: 11px 12px; }
+  .world-filter { gap: 4px; }
+  .world-btn { padding: 4px 9px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+
+<div id="loading">
+  <div class="loading-title">艦これ ドロップ検索</div>
+  <div class="loading-bar-wrap"><div class="loading-bar"></div></div>
+  <div style="color:rgba(255,255,255,.5);font-size:12px">データ読み込み中...</div>
+</div>
+
+<header>
+  艦これ ドロップ検索
+  <span class="sub">KanColle Drop Finder</span>
+  <span class="header-stats" id="headerStats"></span>
+</header>
+
+<div class="container">
+
+  <div class="mode-tabs">
+    <input type="radio" name="mode" id="m-map" value="map" checked>
+    <label for="m-map">海域から探す</label>
+    <input type="radio" name="mode" id="m-ship" value="ship">
+    <label for="m-ship">艦名から探す</label>
+  </div>
+
+  <!-- 海域モード -->
+  <div id="mapArea" class="search-box">
+    <div class="notice">海域を選んでノードごとのドロップを確認できます。橙色は特殊ドロップです。艦名をクリックすると詳細が開きます。</div>
+    <div class="world-filter" id="worldFilter"></div>
+    <div class="ctrl-row" style="margin-bottom:8px">
+      <select id="mapSelect"></select>
+    </div>
+    <div class="src-filter">
+      <button class="src-btn active" data-src="all" onclick="setSrc(this,'all')">全て表示</button>
+      <button class="src-btn" data-src="normal" onclick="setSrc(this,'normal')">通常のみ</button>
+      <button class="src-btn spec" data-src="special" onclick="setSrc(this,'special')">特殊のみ</button>
+    </div>
+  </div>
+
+  <!-- 艦名モード -->
+  <div id="shipArea" class="search-box" style="display:none">
+    <div class="notice">艦名の一部を入力して絞り込めます。艦種フィルターと組み合わせ可能です。</div>
+    <div class="ctrl-row" style="margin-bottom:8px">
+      <input type="text" id="shipSearch" placeholder="艦名を入力（例: 時雨 / Samuel）" autocomplete="off" oninput="onShipInput()">
+      <button class="search-clear" id="clearBtn" style="display:none" onclick="clearSearch()">クリア</button>
+    </div>
+    <div class="ctrl-row" style="margin-bottom:8px">
+      <select id="typeFilter" onchange="onShipInput()">
+        <option value="all">全艦種</option>
+      </select>
+      <select id="srcFilter2" onchange="onShipInput()">
+        <option value="all">通常 + 特殊</option>
+        <option value="normal">通常のみ</option>
+        <option value="special">特殊のみ</option>
+      </select>
+    </div>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<!-- 艦娘詳細モーダル -->
+<div id="shipModal" onclick="onModalBg(event)">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="modalTitle"></span>
+      <span class="type-badge" id="modalType"></span>
+      <button class="modal-close" onclick="closeShipModal()">閉じる</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- 画像拡大 -->
+<div id="imgModal" onclick="closeImgModal()">
+  <img id="imgModalImg" src="" alt="">
+</div>
+
+<!-- 攻略ページ -->
+<div id="kouryakuModal" onclick="onKouryakuBg(event)">
+  <div class="kouryaku-modal-box">
+    <div class="kouryaku-modal-bar">
+      <span id="kouryakuTitle">攻略ページ</span>
+      <a id="kouryakuLink" href="" target="_blank">別タブで開く</a>
+      <button onclick="closeKouryakuModal()">閉じる</button>
+    </div>
+    <iframe id="kouryakuIframe" src="" loading="lazy"></iframe>
+  </div>
+</div>
+
+<script>
+// ========================
+//  定数・設定
+// ========================
+const TYPE_LABELS = ['戦艦系', '空母系', '重巡系', '軽巡系', '駆逐艦', '海防艦', '潜水艦', 'その他'];
+const $ = id => document.getElementById(id);
+
+// ========================
+//  データ
+// ========================
+// mapData[map][node] = [ { ship, typeIdx, normal, special } ]
+// shipData[ship]     = { typeIdx, drops: [ { map, node, normal, special } ] }
+let mapData = {}, shipData = {};
+let currentSrc = 'all';
+let currentWorld = 'all';
+let searchTimer = null;
+
+// ========================
+//  前処理
+// ========================
+function preprocess(normal, special) {
+  function ingest(src, raw) {
+    for (const [map, nodes] of Object.entries(raw)) {
+      if (!mapData[map]) mapData[map] = {};
+      for (const [node, typeArrays] of Object.entries(nodes)) {
+        if (!mapData[map][node]) mapData[map][node] = [];
+        typeArrays.forEach((ships, ti) => {
+          for (const ship of ships) {
+            // mapData entry
+            let me = mapData[map][node].find(e => e.ship === ship);
+            if (!me) {
+              me = { ship, typeIdx: ti, normal: false, special: false };
+              mapData[map][node].push(me);
+            }
+            me[src] = true;
+            // shipData entry
+            if (!shipData[ship]) shipData[ship] = { typeIdx: ti, drops: [] };
+            let de = shipData[ship].drops.find(d => d.map === map && d.node === node);
+            if (!de) {
+              de = { map, node, normal: false, special: false };
+              shipData[ship].drops.push(de);
+            }
+            de[src] = true;
+          }
+        });
+      }
+    }
+  }
+  ingest('normal', normal);
+  ingest('special', special);
+}
+
+// ========================
+//  UIビルド
+// ========================
+function buildWorldFilter() {
+  const worlds = [...new Set(Object.keys(mapData).map(m => m.split('-')[0]))]
+    .sort((a, b) => +a - +b);
+  const wf = $('worldFilter');
+  const all = btn('全海域', 'all', true);
+  wf.appendChild(all);
+  worlds.forEach(w => wf.appendChild(btn(w + '海域', w, false)));
+
+  function btn(label, world, active) {
+    const b = document.createElement('button');
+    b.className = 'world-btn' + (active ? ' active' : '');
+    b.textContent = label;
+    b.onclick = () => {
+      currentWorld = world;
+      document.querySelectorAll('.world-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      buildMapSelect();
+    };
+    return b;
+  }
+}
+
+function buildMapSelect() {
+  const ms = $('mapSelect');
+  const prev = ms.value;
+  ms.innerHTML = '';
+  const maps = Object.keys(mapData)
+    .filter(m => currentWorld === 'all' || m.split('-')[0] === currentWorld)
+    .sort(mapSort);
+  maps.forEach(m => {
+    const o = document.createElement('option');
+    o.value = m; o.textContent = m;
+    ms.appendChild(o);
+  });
+  if (prev && ms.querySelector(`option[value="${prev}"]`)) ms.value = prev;
+  showMap();
+}
+
+function buildTypeFilter() {
+  const tf = $('typeFilter');
+  TYPE_LABELS.forEach((t, i) => {
+    const o = document.createElement('option');
+    o.value = i; o.textContent = t; tf.appendChild(o);
+  });
+}
+
+function updateStats() {
+  const mapCount = Object.keys(mapData).length;
+  const shipCount = Object.keys(shipData).length;
+  const specialCount = Object.keys(shipData).filter(s => shipData[s].drops.some(d => d.special)).length;
+  $('headerStats').textContent = `${mapCount}海域 / ${shipCount}艦 / 特殊${specialCount}艦`;
+}
+
+// ========================
+//  海域モード
+// ========================
+function setSrc(btn, src) {
+  currentSrc = src;
+  document.querySelectorAll('.src-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  showMap();
+}
+
+function showMap() {
+  const map = $('mapSelect').value;
+  if (!map || !mapData[map]) { $('result').innerHTML = ''; return; }
+  const nodes = mapData[map];
+
+  let html = `<div class="card"><div class="card-header">${map}</div>`;
+  html += mediaHtml(map, 'lg');
+
+  for (const node of Object.keys(nodes).sort()) {
+    const all = nodes[node];
+    const entries = all.filter(e => {
+      if (currentSrc === 'normal') return e.normal;
+      if (currentSrc === 'special') return e.special;
+      return true;
+    });
+    if (!entries.length) continue;
+
+    const byType = {};
+    for (const e of entries) {
+      if (!byType[e.typeIdx]) byType[e.typeIdx] = [];
+      byType[e.typeIdx].push(e);
+    }
+
+    const specCount = entries.filter(e => e.special).length;
+    const totalCount = entries.length;
+    let countStr = `${totalCount}艦`;
+    if (specCount > 0) countStr += ` (特殊${specCount})`;
+
+    html += `<div class="node-header">ノード ${node}<span class="node-ship-count">${countStr}</span></div>`;
+
+    for (let ti = 0; ti < 8; ti++) {
+      if (!byType[ti]?.length) continue;
+      html += `<div class="type-header">${TYPE_LABELS[ti]}</div>`;
+      for (const e of byType[ti].sort((a, b) => a.ship.localeCompare(b.ship, 'ja'))) {
+        const badge = e.special ? '<span class="src-badge special">特殊</span>' : '';
+        html += `<div class="drop-row clickable" onclick="openShipModal('${esc(e.ship)}')">${badge}<span class="ship-name">${e.ship}</span></div>`;
+      }
+    }
+  }
+  html += '</div>';
+  $('result').innerHTML = html;
+}
+
+// ========================
+//  艦名モード
+// ========================
+function onShipInput() {
+  clearTimeout(searchTimer);
+  const q = $('shipSearch').value.trim();
+  $('clearBtn').style.display = q ? '' : 'none';
+  searchTimer = setTimeout(showShipResults, 180);
+}
+
+function clearSearch() {
+  $('shipSearch').value = '';
+  $('typeFilter').value = 'all';
+  $('srcFilter2').value = 'all';
+  $('clearBtn').style.display = 'none';
+  showShipResults();
+}
+
+function showShipResults() {
+  const q = $('shipSearch').value.trim();
+  const typeVal = $('typeFilter').value;
+  const srcVal = $('srcFilter2').value;
+  const typeIdx = typeVal === 'all' ? -1 : parseInt(typeVal);
+
+  if (!q && typeVal === 'all' && srcVal === 'all') {
+    $('result').innerHTML = '<div class="hint-box">艦名を入力するか、艦種または絞り込み条件を選択してください。</div>';
+    return;
+  }
+
+  let ships = Object.entries(shipData).filter(([name, d]) => {
+    const matchQ = !q || name.includes(q);
+    const matchT = typeIdx < 0 || d.typeIdx === typeIdx;
+    const matchS = srcVal === 'all' || d.drops.some(drop => drop[srcVal]);
+    return matchQ && matchT && matchS;
+  }).map(([name]) => name).sort((a, b) => a.localeCompare(b, 'ja'));
+
+  if (!ships.length) {
+    $('result').innerHTML = '<div class="no-data">該当する艦娘が見つかりません</div>';
+    return;
+  }
+
+  const MAX = 80;
+  let html = `<div class="result-count">${ships.length}件ヒット${ships.length > MAX ? `（先頭 ${MAX} 件を表示）` : ''}</div>`;
+  for (const ship of ships.slice(0, MAX)) html += buildShipCard(ship, srcVal);
+  if (ships.length > MAX) html += `<div class="no-data">他 ${ships.length - MAX} 件 — 検索ワードを追加してさらに絞り込んでください</div>`;
+  $('result').innerHTML = html;
+}
+
+function buildShipCard(ship, srcFilter) {
+  const d = shipData[ship];
+  srcFilter = srcFilter || 'all';
+
+  let drops = d.drops;
+  if (srcFilter === 'normal') drops = drops.filter(x => x.normal);
+  if (srcFilter === 'special') drops = drops.filter(x => x.special);
+
+  const specMaps = drops.filter(x => x.special).length;
+  const typeName = TYPE_LABELS[d.typeIdx] || 'その他';
+
+  let html = `<div class="card">
+    <div class="card-header" onclick="openShipModal('${esc(ship)}')" style="cursor:pointer">
+      ${ship}
+      <span class="type-badge">${typeName}</span>
+      ${specMaps > 0 ? `<span class="src-badge special" style="margin-left:0">特殊あり</span>` : ''}
+    </div>
+    <div class="map-chip-list">`;
+
+  const maps = [...new Set(drops.map(x => x.map))].sort(mapSort);
+  for (const map of maps) {
+    const mDrops = drops.filter(x => x.map === map);
+    const nodes = [...new Set(mDrops.map(x => x.node))].sort().join('・');
+    const isSpec = mDrops.some(x => x.special);
+    html += `<span class="map-chip${isSpec ? ' special-chip' : ''}" onclick="openShipModal('${esc(ship)}')">${map}<span class="nodes">${nodes}</span></span>`;
+  }
+
+  html += '</div></div>';
+  return html;
+}
+
+// ========================
+//  艦娘詳細モーダル
+// ========================
+function openShipModal(ship) {
+  const d = shipData[ship];
+  if (!d) return;
+
+  $('modalTitle').textContent = ship;
+  $('modalType').textContent = TYPE_LABELS[d.typeIdx] || 'その他';
+
+  const maps = [...new Set(d.drops.map(x => x.map))].sort(mapSort);
+  const specCount = d.drops.filter(x => x.special).length;
+  const normCount = d.drops.filter(x => x.normal).length;
+
+  let html = `<div class="map-chip-list">`;
+  for (const map of maps) {
+    const mDrops = d.drops.filter(x => x.map === map);
+    const nodes = [...new Set(mDrops.map(x => x.node))].sort().join('・');
+    const isSpec = mDrops.some(x => x.special);
+    const sid = `md_${map.replace('-', '_')}`;
+    html += `<span class="map-chip${isSpec ? ' special-chip' : ''}" onclick="scrollInModal('${sid}')">${map}<span class="nodes">${nodes}</span></span>`;
+  }
+  html += '</div>';
+
+  // 統計行
+  html += `<div style="padding:7px 14px;font-size:12px;color:var(--text-sub);border-bottom:1px solid var(--border);background:#fafbfd">`;
+  html += `ドロップ海域: <strong>${maps.length}</strong> 海域 &nbsp;|&nbsp; 通常: <strong>${normCount}</strong> &nbsp;|&nbsp; 特殊: <strong style="color:var(--special)">${specCount}</strong></div>`;
+
+  for (const map of maps) {
+    const mDrops = d.drops.filter(x => x.map === map);
+    const nodes = [...new Set(mDrops.map(x => x.node))].sort().join('・');
+    const isSpec = mDrops.some(x => x.special);
+    const sid = `md_${map.replace('-', '_')}`;
+    html += `<div class="map-subtitle" id="${sid}">${map}`;
+    html += `<span style="font-size:12px;font-weight:400;color:var(--text-sub)">ノード: ${nodes}</span>`;
+    if (isSpec) html += `<span class="src-badge special">特殊あり</span>`;
+    html += `</div>`;
+    html += mediaHtml(map, 'sm');
+  }
+
+  $('modalBody').innerHTML = html;
+  $('shipModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function scrollInModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function closeShipModal() { $('shipModal').classList.remove('open'); document.body.style.overflow = ''; }
+function onModalBg(e) { if (e.target === $('shipModal')) closeShipModal(); }
+
+// ========================
+//  共通ヘルパー
+// ========================
+function mediaHtml(map, size) {
+  const cls = size === 'sm' ? 'map-media-sm' : 'map-media';
+  const me = map.replace(/'/g, "\\'");
+  return `<div class="${cls}">
+    <img src="image/${map}.png" alt="${map}" title="クリックで拡大" onclick="openImgModal(this.src)" onerror="this.style.display='none'">
+    <button class="map-kouryaku-btn" onclick="openKouryakuModal('${me}')">攻略ページを開く</button>
+  </div>`;
+}
+
+function mapSort(a, b) {
+  const [a1, a2] = a.split('-').map(Number);
+  const [b1, b2] = b.split('-').map(Number);
+  return a1 !== b1 ? a1 - b1 : a2 - b2;
+}
+function esc(s) { return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+
+function openImgModal(src) { $('imgModalImg').src = src; $('imgModal').classList.add('open'); }
+function closeImgModal() { $('imgModal').classList.remove('open'); }
+
+function openKouryakuModal(map) {
+  const url = `https://zekamashi.net/kancolle-kouryaku/${map}/`;
+  $('kouryakuTitle').textContent = map + ' 攻略ページ';
+  $('kouryakuLink').href = url;
+  $('kouryakuIframe').src = url;
+  $('kouryakuModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeKouryakuModal() {
+  $('kouryakuModal').classList.remove('open');
+  $('kouryakuIframe').src = '';
+  document.body.style.overflow = '';
+}
+function onKouryakuBg(e) { if (e.target === $('kouryakuModal')) closeKouryakuModal(); }
+
+// ========================
+//  モード切替
+// ========================
+document.querySelectorAll('input[name="mode"]').forEach(r => {
+  r.addEventListener('change', () => {
+    const v = r.value;
+    $('mapArea').style.display = v === 'map' ? '' : 'none';
+    $('shipArea').style.display = v === 'ship' ? '' : 'none';
+    $('result').innerHTML = '';
+    closeShipModal();
+    if (v === 'map') showMap();
+    else showShipResults();
+  });
+});
+$('mapSelect').onchange = showMap;
+
+// ========================
+//  初期化
+// ========================
+Promise.all([
+  fetch('Normal_Drop_Ship.json').then(r => r.json()),
+  fetch('Special_Drop.json').then(r => r.json())
+]).then(([normal, special]) => {
+  preprocess(normal, special);
+  buildWorldFilter();
+  buildMapSelect();
+  buildTypeFilter();
+  updateStats();
+  const loading = $('loading');
+  loading.classList.add('hidden');
+  setTimeout(() => loading.style.display = 'none', 500);
+}).catch(err => {
+  $('loading').innerHTML = `<div style="color:#f88;font-size:14px">読み込みエラー: ${err.message}<br><br><span style="font-size:12px;opacity:.7">JSONファイルと同じディレクトリで実行してください</span></div>`;
+});
+</script>
+</body>
+</html>
