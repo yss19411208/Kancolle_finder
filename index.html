@@ -220,7 +220,12 @@ header {
   font-size: 12px; font-weight: 700; color: var(--navy2); letter-spacing: .06em;
   border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
   display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none;
 }
+.node-header:hover { background: #d8e8f8; }
+.node-toggle { font-size: 10px; color: var(--text-sub); margin-left: 4px; flex-shrink: 0; }
+.node-body { display: none; }
+.node-body.open { display: block; }
 .node-count {
   font-size: 11px; font-weight: 400; color: var(--text-sub); margin-left: auto;
   background: rgba(46,109,187,.1); padding: 1px 8px; border-radius: 10px;
@@ -589,7 +594,7 @@ function buildWorldFilter() {
   const worlds = [...new Set(Object.keys(mapData).map(m => m.split('-')[0]))].sort((a,b)=>+a-+b);
   const wf = $('worldFilter');
   wf.innerHTML = '';
-  [['all','全海域'], ...worlds.map(w=>[w, w+'海域'])].forEach(([val,label], i) => {
+  [['all','全海域'], ...worlds.map(w=>[w, w+'-X'])].forEach(([val,label], i) => {
     const b = document.createElement('button');
     b.className = 'world-btn' + (i===0 ? ' active' : '');
     b.textContent = label;
@@ -665,6 +670,14 @@ function buildUpdateDrawer() {
 // ============================================================
 //  海域モード
 // ============================================================
+function toggleNode(id) {
+  const body = document.getElementById(id);
+  const tog  = document.getElementById('tog_' + id);
+  if (!body) return;
+  const open = body.classList.toggle('open');
+  if (tog) tog.textContent = open ? '▼' : '▶';
+}
+
 function setMapSrc(btn, src) {
   currentMapSrc = src;
   document.querySelectorAll('#mapArea .src-btn').forEach(b => b.classList.remove('active'));
@@ -699,8 +712,10 @@ function showMap() {
     const limCnt  = entries.filter(e => e.limited === true).length;
     let cntStr = `${entries.length}艦`;
     if (limCnt > 0) cntStr += ` (限定${limCnt})`;
+    const nodeId = `node_${map.replace('-','_')}_${node}`;
 
-    html += `<div class="node-header">ノード ${node}<span class="node-count">${cntStr}</span></div>`;
+    html += `<div class="node-header" onclick="toggleNode('${nodeId}')">ノード ${node}<span class="node-count">${cntStr}</span><span class="node-toggle" id="tog_${nodeId}">▶</span></div>`;
+    html += `<div class="node-body" id="${nodeId}">`;
     for (let ti = 0; ti < TYPE_LABELS.length; ti++) {
       if (!byType[ti]?.length) continue;
       html += `<div class="type-header">${TYPE_LABELS[ti]}</div>`;
@@ -709,6 +724,7 @@ function showMap() {
         html += `<div class="drop-row" onclick="openModal('${esc(e.ship)}')">${limBadge}<span class="ship-name">${e.ship}</span></div>`;
       }
     }
+    html += `</div>`;
   }
   html += '</div>';
   $('result').innerHTML = html;
@@ -765,7 +781,6 @@ function setShipSrc(btn, src) {
 function clearSearch() {
   $('nameInput').value = '';
   $('shipDropdown').value = '';
-  $('typeFilter').value = 'all';
   $('clearBtn').style.display = 'none';
   rebuildDropdown();
   showShipResults();
@@ -1027,5 +1042,14 @@ Promise.all([
   </div>`;
 });
 </script>
+<div style="text-align:center;padding:18px 12px 8px;font-size:11px;color:#8898b0;border-top:1px solid var(--border);margin-top:8px">
+  データ出典 / Credits:
+  <a href="https://zekamashi.net/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">ぜかましネット</a>
+  &nbsp;/&nbsp;
+  <a href="https://wikiwiki.jp/kancolle/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">艦これ Wiki</a>
+  &nbsp;/&nbsp;
+  <a href="https://poi.io/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">poi Wiki</a>
+</div>
+
 </body>
 </html>
