@@ -902,10 +902,12 @@ function renderBuild(ship) {
   if (!data || !data.length)
     return '<div class="no-data">建造データなし（ドロップ限定またはイベント報酬）</div>';
 
-  const state = buildSort[ship] || { col: null, asc: true };
+  const state = buildSort[ship] || { col: 'score', asc: false };
   const rows  = data.slice().sort((a, b) => {
     if (!state.col) return 0;
-    return state.asc ? a[state.col]-b[state.col] : b[state.col]-a[state.col];
+    const av = a[state.col] ?? 0;
+    const bv = b[state.col] ?? 0;
+    return state.asc ? av - bv : bv - av;
   });
 
   const se = ship.replace(/"/g,'&quot;').replace(/'/g,"\\'");
@@ -919,6 +921,7 @@ function renderBuild(ship) {
       <th>レシピ（燃/弾/鋼/ボ/資材）</th>
       ${th('Count','試行数')}
       ${th('rate','確率')}
+      ${th('score','スコア')}
       <th>秘書艦</th>
     </tr></thead><tbody>`;
 
@@ -931,6 +934,7 @@ function renderBuild(ship) {
       <td><span class="recipe-text">${r.recipe.join(' / ')}</span>${bigBadge}</td>
       <td>${(r.Count||0).toLocaleString()}</td>
       <td>${r.rate}%</td>
+      <td>${r.score}</td>
       <td><div class="first-ships">${tags}${more}</div></td>
     </tr>`;
   }
@@ -1011,17 +1015,46 @@ document.querySelectorAll('input[name="mode"]').forEach(r => {
 $('mapSelect').onchange = showMap;
 
 // ============================================================
+//  建造データ計算
+// ============================================================
+function computeBuild(shipRaw, recipeRaw) {
+  const result = {};
+  for (const [ship, val] of Object.entries(shipRaw)) {
+    const recipes = val?.items?.items || [];
+    const seen    = new Set();
+    const entries = [];
+    for (const recipeArr of recipes) {
+      const key = recipeArr.join('/');
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const all = recipeRaw[key];
+      if (!all || !all.length) continue;
+      const total    = all.length;
+      const matching = all.filter(e => e[0] === ship);
+      if (!matching.length) continue;
+      const rate  = Math.round(matching.length / total * 10000) / 100;
+      const score = Math.round(rate * Math.sqrt(total) * 100) / 100;
+      const secretaries = [...new Set(matching.map(e => e[1]))];
+      entries.push({ recipe: recipeArr, Count: total, rate, score, FirstShip: secretaries });
+    }
+    if (entries.length) result[ship] = entries;
+  }
+  return result;
+}
+
+// ============================================================
 //  初期化
 // ============================================================
 Promise.all([
   fetch('Normal_Drop_Ship.json').then(r=>r.json()),
   fetch('Special_Drop.json').then(r=>r.json()),
-  fetch('Build_Data.json').then(r=>r.json()).catch(()=>({})),
+  fetch('Create_Ship_Data.json').then(r=>r.json()).catch(()=>({})),
+  fetch('Create_Ship_Recipe.json').then(r=>r.json()).catch(()=>({})),
   fetch('Update.json').then(r=>r.json()).catch(()=>[])
-]).then(([normal, special, build, update]) => {
+]).then(([normal, special, shipRaw, recipeRaw, update]) => {
   ingest(normal,  'normal');
   ingest(special, 'limited');
-  BUILD  = build  || {};
+  BUILD  = computeBuild(shipRaw, recipeRaw);
   UPDATE = Array.isArray(update) ? update : [];
 
   buildWorldFilter();
