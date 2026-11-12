@@ -121,6 +121,19 @@ def http_get(url, dest=None, timeout=120, tries=3):
     raise RuntimeError(f"取得できませんでした: {url}: {last}")
 
 
+def http_head(url, timeout=30):
+    """ダンプの更新を調べるため、Last-Modified と Content-Length だけを取る。失敗したら None。"""
+    try:
+        req = urllib.request.Request(url, method="HEAD", headers={
+            "User-Agent": "Kancolle_finder-updater (+https://github.com/yss19411208/Kancolle_finder)"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            lm, cl = r.headers.get("Last-Modified"), r.headers.get("Content-Length")
+            return f"{lm}|{cl}" if (lm or cl) else None
+    except Exception as e:  # noqa: BLE001
+        log(f"  更新の確認に失敗 ({url}): {e}")
+        return None
+
+
 def parse_dt(s):
     """'YYYY/MM/DD HH:MM:SS' (日本時間) -> epoch 秒。秒や時刻は省略可。"""
     s = (s or "").strip().replace("-", "/").replace("T", " ")
@@ -938,6 +951,15 @@ def main():
     sig = hashlib.sha1(json.dumps([sorted(cuts), resident], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
     skip_dump = (args.smart and meta.get("sig") == sig and now - meta.get("fetched_at", 0) < 20 * 3600
                  and month_of(now) in drop_states)
+    # 毎朝 5〜9 時に何度か起動するので、ダンプが前回から更新されていなければ取り直さない
+    dump_ver = {}
+    if not skip_dump and not args.no_download and not args.drop_file and month_of(now) in drop_states:
+        for fname in ("dropshiprecords.gz", "createshiprecords.gz"):
+            dump_ver[fname] = http_head(DUMP_BASE + fname)
+        same_dump = all(v and v == (meta.get("dump_ver") or {}).get(k) for k, v in dump_ver.items())
+        if same_dump and meta.get("sig") == sig:
+            skip_dump = True
+            log("ダンプは前回の取得から更新されていないため、取り直しません")
     if skip_dump:
         log(f"当月ダンプは {fmt_dt(meta['fetched_at'])} に取得済みのため再取得しません")
         notes.append(f"当月ダンプは取得済みのものを使用 ({fmt_dt(meta['fetched_at'])} 取得)")
@@ -965,7 +987,9 @@ def main():
                     drop_states = merge_state(args.state_dir, "drop", drop_states, new)
                     if not given:
                         os.makedirs(args.state_dir, exist_ok=True)
-                        save_json(meta_path, {"sig": sig, "fetched_at": now})
+                        if not dump_ver:
+                            dump_ver = {f: http_head(DUMP_BASE + f) for f in ("dropshiprecords.gz", "createshiprecords.gz")}
+                        save_json(meta_path, {"sig": sig, "fetched_at": now, "dump_ver": dump_ver})
                 else:
                     new = aggregate_builds(path)
                     build_states = merge_state(args.state_dir, "build", build_states, new)

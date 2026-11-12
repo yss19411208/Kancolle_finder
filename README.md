@@ -44,7 +44,7 @@
 
 ## データ更新の仕組み
 
-1. GitHub Actions が毎日 07:17 頃（日本時間）に [poi-server](https://github.com/poooi/poi-server/wiki) のダンプ（`dropshiprecords` / `createshiprecords`）を取得して集計します。管理画面で設定を保存したときと、手動実行でも動きます。
+1. GitHub Actions が毎日 05:07〜09:07（日本時間）に毎時 1 回、 [poi-server](https://github.com/poooi/poi-server/wiki) のダンプ（`dropshiprecords` / `createshiprecords`）を取得して集計します。管理画面で設定を保存したときと、手動実行でも動きます。
 2. ダンプは月初にリセットされるため、月ごとの集計結果を `state` ブランチに保存し、過去の月と合算します。ダンプ本体は保存しません。
    常駐ドロップの率は 2026年9月分から積み上げます（過去の月は `https://db.poi.moe/` のアーカイブから一度だけ取り込み）。アップデート日時がそれより前の月にある場合は、その月の分も取り込みます。
 3. 艦ID→艦名は [api_start2](https://github.com/Tibowl/api_start2)、セルID→マス名は [poi](https://github.com/poooi/poi) と [KC3改](https://github.com/KC3Kai/KC3Kai) のデータを使います。

@@ -153,7 +153,7 @@ function renderDash() {
 const signed = n => (n > 0 ? '+' : '') + Number(n).toLocaleString();
 function renderLog() {
   const list = (Array.isArray(S.log) ? S.log : []).slice().reverse();
-  const trig = { schedule: '毎日の自動更新', workflow_dispatch: '手動の再集計', push: '設定の保存', manual: '手元で実行' };
+  const trig = { schedule: '定時の自動更新', workflow_dispatch: '手動の再集計', push: '設定の保存', manual: '手元で実行' };
   const box = $('logList');
   if (!list.length) { box.replaceChildren(el('p', { class: 'note' }, 'まだ記録がありません。次の集計から記録されます。')); return; }
   box.replaceChildren(...list.map((e, i) => {

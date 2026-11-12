@@ -35,7 +35,7 @@
   </div>
   <div class="card">
     <h2>データ更新の記録</h2>
-    <p class="note">集計のたびに、前回から何が変わったかを記録します（新しい順）。行を押すと、追加・終了した艦の内訳が開きます。自動更新は毎日 07:17 頃（日本時間）です。</p>
+    <p class="note">集計のたびに、前回から何が変わったかを記録します（新しい順）。行を押すと、追加・終了した艦の内訳が開きます。自動更新は毎日 05:07〜09:07（日本時間）に毎時 1 回です。poi のデータは 1 日 1 回なので、実際に件数が増えるのは最初の 1 回だけです。</p>
     <div id="logList" class="log"></div>
   </div>
   <div class="card">
@@ -51,7 +51,7 @@
   </div>
   <div class="card">
     <h2>再集計</h2>
-    <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 07:17 頃と、設定の保存時にも自動で実行されます。</p>
+    <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 05:07〜09:07 に毎時 1 回と、設定の保存時にも自動で実行されます。</p>
     <button class="btn primary" id="rerunBtn">今すぐ再集計する</button>
     <button class="btn" id="runsReload">状況を更新</button>
     <table class="list" id="runsTable"><thead><tr><th>開始</th><th>きっかけ</th><th>状態</th><th></th></tr></thead><tbody></tbody></table>
