@@ -5,6 +5,15 @@
       "note": "ハロウィンイベ終了&サンマイベ前"
     }
   ],
-  "limited_manual": [],
-  "limited_exclude": []
+  "limited_manual": [
+    {
+      "map": "1-2",
+      "node": "E",
+      "ship": "Salmon",
+      "added": "2026/11/12 20:01:02"
+    }
+  ],
+  "limited_exclude": [],
+  "limited_keep": [],
+  "auto_resident_exclude": []
 }
