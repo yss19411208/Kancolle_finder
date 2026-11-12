@@ -208,6 +208,8 @@ def validate(key, c):
         for k in ("updates", "limited_manual", "limited_exclude"):
             if not isinstance(c.get(k), list):
                 return f"{k} がありません"
+        if c.get("rate_mode", "node_s") not in ("node_s", "node_all", "map_all"):
+            return "ドロップ率の計算方法が不正です"
         for u in c["updates"]:
             if not (isinstance(u, dict) and is_str(u.get("at"), 19) and len(u["at"]) == 19):
                 return "アップデート日時は YYYY/MM/DD HH:MM:SS で入力してください"

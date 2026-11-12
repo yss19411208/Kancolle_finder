@@ -33,6 +33,17 @@
     <div id="dashInfo" class="kv">読み込み中...</div>
   </div>
   <div class="card">
+    <h2>ドロップ率の計算方法</h2>
+    <p class="note">公開ページに表示する％の出し方です。変更はその場で保存され、再集計後に反映されます。</p>
+    <div class="row">
+      <select id="rateMode">
+        <option value="node_s">マスごと・S勝利のみ（そのマスで S勝利したうち何％で出たか）</option>
+        <option value="node_all">マスごと・全勝利（そのマスで S/A/B 勝利したうち何％で出たか）</option>
+        <option value="map_all">海域全体（その海域の全勝利のうち、そのマスでその艦が出た割合）</option>
+      </select>
+    </div>
+  </div>
+  <div class="card">
     <h2>再集計</h2>
     <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 07:17 頃と、設定の保存時にも自動で実行されます。</p>
     <button class="btn primary" id="rerunBtn">今すぐ再集計する</button>

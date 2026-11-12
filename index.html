@@ -261,6 +261,14 @@ header {
 .rate-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
 .rate-table td.r { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue); }
 .rate-table td.n { text-align: right; color: var(--text-sub); font-size: 11px; }
+.recipe-detail { font-size: 11.5px; color: var(--text-sub); margin-top: 4px; line-height: 1.7; }
+.recipe-detail b { color: #6a5200; font-weight: 700; margin-right: 4px; }
+.recipe-detail .me { color: var(--blue); font-weight: 700; }
+.sources { max-width: 960px; margin: 28px auto 8px; padding: 14px 16px; font-size: 12px; color: #7888a8; border-top: 1px solid var(--border); line-height: 1.8; }
+.sources h3 { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+.sources ul { list-style: none; }
+.sources a { color: #5878b0; text-decoration: none; }
+.sources a:hover { text-decoration: underline; }
 .data-note { font-size: 11px; color: var(--text-sub); margin-top: 6px; }
 .badge.big { color: var(--gold); background: var(--gold-bg); border-color: var(--gold-bd); }
 
@@ -535,7 +543,9 @@ const $ = id => document.getElementById(id);
 let mapData  = {};  // mapData[map][node] = [{ship, ti, normal, limited, rate, drops, n, basis}]
 let nodeMeta = {};  // nodeMeta[map][node] = {boss, n}
 let shipData = {};  // shipData[name]     = {ti, drops:[{map,node,normal,limited,rate,drops,n,basis}]}
-let BUILD    = {};  // BUILD[name]        = [recipe entries]
+let BUILD    = {};
+let RECIPES  = {};  // RECIPES['燃/弾/鋼/ボ/資材'] = {n, types:[[艦種, %]], top:[[艦名, %]]}
+let BUILD_INFO = {};  // BUILD[name]        = [recipe entries]
 let UPDATE   = [];
 let DROP_INFO = {};
 
@@ -573,7 +583,8 @@ function rateText(e) {
 }
 function rateTitle(e) {
   if (e.rate === null || e.rate === undefined) return 'poiの統計に報告なし';
-  return `${e.basis === 'S' ? 'S勝利' : 'S/A/B勝利'} ${Number(e.n).toLocaleString()}回中 ${Number(e.drops).toLocaleString()}回`;
+  const base = { S: 'S勝利', SAB: 'S/A/B勝利', MAP: '海域全体のS/A/B勝利' }[e.basis] || '勝利';
+  return `${base} ${Number(e.n).toLocaleString()}回中 ${Number(e.drops).toLocaleString()}回`;
 }
 function nodeCmp(a, b) { return a.localeCompare(b, 'en', { numeric: true }); }
 // 「A:10%・C:20%」形式
@@ -952,8 +963,15 @@ function renderBuild(ship) {
     const bigBadge = isBig ? ' <span class="badge big">大型</span>' : '';
     const tags     = (r.FirstShip||[]).slice(0,12).map(s=>`<span class="ship-tag">${s}</span>`).join('');
     const more     = (r.FirstShip||[]).length>12 ? `<span class="ship-tag">他${(r.FirstShip||[]).length-12}艦</span>` : '';
+    const info = RECIPES[r.recipe.join('/')];
+    let detail = '';
+    if (info) {
+      const types = info.types.slice(0, 4).map(([ti, p]) => `${TYPE_LABELS[ti]} ${p}%`).join(' / ');
+      const top   = info.top.map(([n, p]) => `<span class="${n === ship ? 'me' : ''}">${n} ${p}%</span>`).join('・');
+      detail = `<div class="recipe-detail"><div><b>出やすい艦種</b>${types}</div><div><b>出やすい艦 TOP5</b>${top}</div></div>`;
+    }
     html += `<tr>
-      <td><span class="recipe-text">${r.recipe.join(' / ')}</span>${bigBadge}</td>
+      <td><span class="recipe-text">${r.recipe.join(' / ')}</span>${bigBadge}${detail}</td>
       <td>${(r.Count||0).toLocaleString()}</td>
       <td>${(r.hit||0).toLocaleString()}</td>
       <td>${r.rate}%</td>
@@ -962,6 +980,8 @@ function renderBuild(ship) {
     </tr>`;
   }
   html += '</tbody></table></div>';
+  html += `<div class="data-note" style="padding:8px 12px">スコアは「試行数が多く、確率が高い」レシピほど高くなります（確率 × 試行数 ÷ (試行数 + 100)）。`
+    + (BUILD_INFO.records ? `建造記録 ${Number(BUILD_INFO.records).toLocaleString()} 件（${(BUILD_INFO.months || []).join('、')}）を集計。` : '') + `</div>`;
   return html;
 }
 
@@ -1038,13 +1058,28 @@ document.querySelectorAll('input[name="mode"]').forEach(r => {
 $('mapSelect').onchange = showMap;
 
 // ============================================================
+//  集計に使ったデータ (ページ最下部)
+// ============================================================
+function renderSources() {
+  const d = DROP_INFO, b = BUILD_INFO;
+  const li = (d.sources || []).map(x => `<li><a href="${x.url}" target="_blank" rel="noopener">${x.name}</a> … ${x.use}</li>`).join('');
+  const lines = [
+    d.records ? `ドロップ記録: ${Number(d.records).toLocaleString()} 件（${(d.months || []).join('、')} / ${d.data_from || '?'} ～ ${d.data_to || '?'}）` : '',
+    d.cutoff ? `限定ドロップ: ${d.cutoff} 以降の記録（${(d.limited_months || []).join('、')}）` : '限定ドロップ: 集計期間の全記録',
+    b.records ? `建造記録: ${Number(b.records).toLocaleString()} 件（${(b.months || []).join('、')}）` : '',
+    `最終集計: ${d.generated || '不明'}（日本時間、毎日自動更新）`,
+  ].filter(Boolean).map(x => `<li>${x}</li>`).join('');
+  $('sources').innerHTML = `<h3>集計に使用したデータ</h3><ul>${li}</ul><h3 style="margin-top:8px">集計範囲</h3><ul>${lines}</ul>`;
+}
+
+// ============================================================
 //  建造データ計算
 // ============================================================
 // Build_Data.json: ships[艦名] = [{recipe, Count(レシピの試行数), hit(その艦が出た数), rate, big, FirstShip}]
 function computeBuild(raw) {
   const result = {};
   for (const [ship, list] of Object.entries((raw && raw.ships) || {})) {
-    result[ship] = list.map(r => ({ ...r, score: Math.round(r.rate * Math.sqrt(r.Count) * 100) / 100 }));
+    result[ship] = list.map(r => ({ ...r, score: r.score ?? Math.round(r.rate * Math.sqrt(r.Count) * 100) / 100 }));
   }
   return result;
 }
@@ -1061,10 +1096,18 @@ Promise.all([
 ]).then(([drop, build, update]) => {
   ingestDrop(drop);
   BUILD  = computeBuild(build);
+  RECIPES = (build && build.recipes) || {};
+  BUILD_INFO = build || {};
   UPDATE = Array.isArray(update) ? update : [];
   // 建造でしか出ない艦も艦名検索に出す
   for (const ship of Object.keys(BUILD)) if (!shipData[ship]) shipData[ship] = { ti: (build.types || {})[ship] ?? 7, drops: [], buildOnly: true };
-  $('dataNote').innerHTML = `<div class="data-note">％は poi 統計による S勝利時のドロップ率です（「—」は報告なし）。`
+  const modeNote = {
+    node_s:   '％は poi 統計による、そのマスで S勝利したときのドロップ率です',
+    node_all: '％は poi 統計による、そのマスで勝利(S/A/B)したときのドロップ率です',
+    map_all:  '％は poi 統計による、その海域全体の勝利(S/A/B)のうち、そのマスでその艦が出た割合です',
+  }[DROP_INFO.rate_mode] || '％は poi 統計によるドロップ率です';
+  renderSources();
+  $('dataNote').innerHTML = `<div class="data-note">${modeNote}（「—」は報告なし）。`
     + (DROP_INFO.records ? `集計 ${Number(DROP_INFO.records).toLocaleString()} 件 / ` : '')
     + `更新 ${DROP_INFO.generated || '不明'}`
     + (DROP_INFO.cutoff ? ` / 限定は ${DROP_INFO.cutoff} 以降のデータ` : '') + `</div>`;
@@ -1087,6 +1130,7 @@ Promise.all([
   </div>`;
 });
 </script>
+<div class="sources" id="sources"></div>
 <div style="text-align:center;padding:18px 12px 8px;font-size:11px;color:#8898b0;border-top:1px solid var(--border);margin-top:8px">
   データ出典 / Credits:
   <a href="https://zekamashi.net/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">ぜかましネット</a>

@@ -144,6 +144,7 @@ function renderDash() {
     ['限定ドロップ', `${nLim} 件（うち手動 ${nMan} 件）`],
     ['海域数', Object.keys(d.maps || {}).length],
   ];
+  $('rateMode').value = S.config.rate_mode || 'node_s';
   $('dashInfo').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, String(v))]));
 }
 async function loadRuns() {
@@ -388,6 +389,10 @@ $('rerunBtn').addEventListener('click', async e => {
   try { await api('/api/rerun', {}); toast('再集計を開始しました'); watchRuns(); }
   catch (err) { toast(err.message, true); }
   finally { setTimeout(() => { e.target.disabled = false; }, 5000); }
+});
+$('rateMode').addEventListener('change', e => {
+  S.config.rate_mode = e.target.value;
+  markDirty('config', `ドロップ率の計算方法を変更 (${e.target.value})`);
 });
 $('runsReload').addEventListener('click', () => reloadAll());
 $('reloadBtn').addEventListener('click', () => reloadAll());

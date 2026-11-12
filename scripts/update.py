@@ -38,6 +38,17 @@ DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
 STATE_VERSION = 2
 MAX_ARCHIVE_MONTHS = 12  # さかのぼって取得する過去月の上限
+DATA_START_MONTH = "2026-11"   # 常駐ドロップの率はこの月から毎月積み上げる
+RATE_MODES = ("node_s", "node_all", "map_all")
+SOURCES = [
+    {"name": "poi-db ドロップ記録・建造記録 (poi-server)", "url": "https://github.com/poooi/poi-server/wiki",
+     "use": "ドロップ率・限定ドロップ・建造レシピ"},
+    {"name": "艦これ攻略Wiki 出撃ドロップ", "url": "https://wikiwiki.jp/kancolle/%E5%87%BA%E6%92%83%E3%83%89%E3%83%AD%E3%83%83%E3%83%97",
+     "use": "常駐ドロップの一覧"},
+    {"name": "api_start2 (Tibowl)", "url": "https://github.com/Tibowl/api_start2", "use": "艦ID→艦名・艦種"},
+    {"name": "poi 海域データ (fcd/map.json)", "url": "https://github.com/poooi/poi", "use": "セルID→マス名"},
+    {"name": "KC3改 edges.json", "url": "https://github.com/KC3Kai/KC3Kai", "use": "セルID→マス名の補完"},
+]
 START2_URLS = [
     "https://raw.githubusercontent.com/Tibowl/api_start2/master/start2.json",
 ]
@@ -422,6 +433,8 @@ def load_config():
     cfg.setdefault("updates", [])
     cfg.setdefault("limited_manual", [])
     cfg.setdefault("limited_exclude", [])
+    if cfg.get("rate_mode") not in RATE_MODES:
+        cfg["rate_mode"] = "node_s"
     return cfg
 
 
@@ -455,6 +468,8 @@ def build_drop_data(states, resident, cfg, ships, now):
         return base_start
 
     months = sorted(states)
+    res_months = [mo for mo in months if mo >= DATA_START_MONTH]   # 常駐の率に使う月
+    mode = cfg.get("rate_mode", "node_s")
     den_cache = {}
 
     def den_since(m, node, start):
@@ -469,13 +484,41 @@ def build_drop_data(states, resident, cfg, ships, now):
             den_cache[key] = (a, b)
         return den_cache[key]
 
-    def rate(ds, do, ns, no):
-        """S勝利ベース。S勝利でのドロップが無ければ A/B 勝利も含めた値。"""
-        if ds and ns:
+    def rate(ds, do, ns, no, m=None, start=None):
+        """率 [%], ドロップ数, 分母, 基準 を返す。
+        node_s  : そのマスの S勝利のうち何回出たか (S勝利で出ていなければ A/B も含める)
+        node_all: そのマスの S/A/B 勝利のうち何回出たか
+        map_all : その海域の全マスの S/A/B 勝利のうち、このマスで何回出たか
+        """
+        if mode == "map_all":
+            n = map_den(m, start)
+            d = ds + do
+            return (round(d / n * 100, 2 if d / n >= 0.0001 else 3), d, n, "MAP") if d and n else (None, 0, n, "")
+        if mode == "node_s" and ds and ns:
             return round(ds / ns * 100, 2), ds, ns, "S"
         if (ds + do) and (ns + no):
             return round((ds + do) / (ns + no) * 100, 2), ds + do, ns + no, "SAB"
-        return None, 0, ns, ""
+        return None, 0, ns if mode == "node_s" else ns + no, ""
+
+    map_cache = {}
+
+    def map_den(m, start):
+        """海域全体の S/A/B 勝利数。start=None は常駐用 (積み上げ全期間)、それ以外は start 以降。"""
+        key = (m, start)
+        if key not in map_cache:
+            n = 0
+            if start is None:
+                for mo in res_months:
+                    for t in states[mo]["tot"].get(m, {}).values():
+                        n += t["S"][0] + t["O"][0]
+            else:
+                for mo in months:
+                    for hours in states[mo]["hden"].get(m, {}).values():
+                        for h, (a, b) in hours.items():
+                            if int(h) >= start:
+                                n += a + b
+            map_cache[key] = n
+        return map_cache[key]
 
     maps = {}
     all_places = set()
@@ -507,6 +550,8 @@ def build_drop_data(states, resident, cfg, ships, now):
             if not t:
                 continue
             boss |= t.get("b", 0)
+            if mo not in res_months:
+                continue
             nS += t["S"][0]
             nO += t["O"][0]
             for sid, n in t["S"][1].items():
@@ -518,11 +563,16 @@ def build_drop_data(states, resident, cfg, ships, now):
         # 常駐
         for nn, (nm, ti) in res_names.items():
             sid = id_by_norm.get(nn)
-            r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO) if sid else (None, 0, nS, "")
+            r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m) if sid else (None, 0, nS, "")
             rows.append([nm, ti, 0, r, d, n, basis, ""])
             seen.add(nn)
         # 限定 (poi で観測され、常駐リストに無い艦)
-        cand = set(dS) | set(dO)
+        cand = set()
+        for mo in months:
+            t = states[mo]["tot"].get(m, {}).get(node)
+            if t:
+                cand.update(int(x) for x in t["S"][1])
+                cand.update(int(x) for x in t["O"][1])
         for sid in cand:
             nm = name_of.get(sid, f"ID:{sid}")
             nn = norm_name(nm)
@@ -547,7 +597,7 @@ def build_drop_data(states, resident, cfg, ships, now):
             if not (ds + do):
                 continue
             ns, no = den_since(m, node, start)
-            r, d, n, basis = rate(ds, do, ns, no)
+            r, d, n, basis = rate(ds, do, ns, no, m, start)
             rows.append([nm, ti_of.get(sid, 7), 1, r, d, n, basis, "auto"])
             seen.add(nn)
         # 手動で追加した限定 (追加日時が基準日時より前のものは自動的に外れる)
@@ -571,18 +621,34 @@ def build_drop_data(states, resident, cfg, ships, now):
         rows.sort(key=lambda r: (r[1], r[2], r[0]))
         maps.setdefault(m, {})[node] = {"boss": boss, "n": nS, "ships": rows}
 
-    first = min((states[mo]["first"] for mo in months), default=None)
+    first = min((states[mo]["first"] for mo in res_months), default=None)
     last = max((states[mo]["last"] for mo in months), default=None)
     return {
         "generated": fmt_dt(now),
         "data_from": fmt_dt(first) if first else None,
         "data_to": fmt_dt(last) if last else None,
         "cutoff": fmt_dt(cutoff) if cutoff is not None else None,
-        "records": sum(states[mo]["records"] for mo in months),
+        "records": sum(states[mo]["records"] for mo in res_months),
+        "months": res_months,
+        "limited_months": [mo for mo in months if cutoff is not None and mo >= month_of(cutoff)] or res_months,
+        "rate_mode": mode,
+        "sources": SOURCES,
         "types": TYPE_LABELS,
         "columns": ["name", "type", "limited", "rate", "drops", "battles", "basis", "source"],
         "maps": maps,
     }
+
+
+BUILD_SCORE_K = 100   # スコアで「十分な試行数」とみなす目安
+
+
+def build_score(hit, n):
+    """建造レシピのスコア = 確率[%] × 試行数 / (試行数 + 100)。
+    試行数が少ないレシピは大きく割り引かれ、試行数が多く確率も高いレシピが上位になる。
+    (例: 1/1 回 = 100% は 0.99 点、3/26 回 = 11.5% は 2.38 点、127/4013 回 = 3.16% は 3.09 点)"""
+    if not n:
+        return 0.0
+    return round(hit / n * 100 * n / (n + BUILD_SCORE_K), 2)
 
 
 def build_build_data(states, ships, now):
@@ -609,18 +675,38 @@ def build_build_data(states, ships, now):
                 "Count": r["n"],
                 "hit": n,
                 "rate": round(n / r["n"] * 100, 2),
+                "score": build_score(n, r["n"]),
                 "big": bool(r["large"]),
                 "FirstShip": [name_of.get(int(s), f"ID:{s}") for s, _ in top],
             })
     ships_out = {}
     for name, lst in by_ship.items():
-        lst.sort(key=lambda e: -(e["rate"] * (e["Count"] ** 0.5)))
+        lst.sort(key=lambda e: (-e["score"], -e["Count"]))
         ships_out[name] = lst[:BUILD_TOP_RECIPES]
+    # 掲載するレシピごとに、出やすい艦種と出やすい艦 TOP5
+    used = {"/".join(map(str, e["recipe"])) for lst in ships_out.values() for e in lst}
+    recipe_out = {}
+    for key in used:
+        r = recipes[key]
+        by_type = defaultdict(int)
+        by_ship = []
+        for sid, (n, _) in r["ships"].items():
+            nm = name_of.get(int(sid), f"ID:{sid}")
+            by_type[ti_by_name.get(nm, 7)] += n
+            by_ship.append((n, nm))
+        by_ship.sort(key=lambda x: (-x[0], x[1]))
+        recipe_out[key] = {
+            "n": r["n"],
+            "types": [[ti, round(c / r["n"] * 100, 1)] for ti, c in sorted(by_type.items(), key=lambda kv: -kv[1])],
+            "top": [[nm, round(c / r["n"] * 100, 1)] for c, nm in by_ship[:5]],
+        }
     return {
         "generated": fmt_dt(now),
         "records": sum(states[mo]["records"] for mo in states),
         "months": sorted(states),
         "types": {n: ti_by_name.get(n, 7) for n in sorted(ships_out)},
+        "type_labels": TYPE_LABELS,
+        "recipes": recipe_out,
         "ships": dict(sorted(ships_out.items())),
     }
 
