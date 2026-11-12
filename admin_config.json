@@ -11,12 +11,6 @@
       "map": "1-2",
       "node": "E",
       "ship": "Salmon"
-    },
-    {
-      "map": "1-1",
-      "node": "E",
-      "ship": "秋津洲",
-      "added": "2026/11/12 20:09:10"
     }
   ],
   "limited_exclude": [],
