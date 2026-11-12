@@ -66,6 +66,14 @@ python scripts/update.py --state-dir state
 
 このツールは非公式のファンメイドツールです。DMM GAMES / C2 Preparat / KADOKAWAとは一切関係ありません。
 
+## ライセンス
+
+Copyright (c) 2026 yss19411208. All rights reserved.
+
+このリポジトリのソースコード・デザイン・文章は、作者の許可なく複製・改変・再配布・商用利用できません。公開サイトの閲覧と利用は自由です。詳しくは [LICENSE](LICENSE) を見てください。
+
+ゲームの名称・画像・データ、poi-db の記録、艦これ攻略Wiki の内容など、第三者に権利があるものはこのライセンスの対象外です。
+
 ---
 
 ⚓ Happy Hunting, Admiral!

@@ -1,0 +1,58 @@
+Copyright (c) 2026 yss19411208. All rights reserved.
+
+■ 利用条件（日本語）
+
+このリポジトリに含まれるソースコード、画面デザイン、文章、および作者が作成した
+集計結果ファイル（以下「本ソフトウェア」）の著作権は、作者（yss19411208）にあります。
+
+作者の事前の許可なく、次の行為をすることを禁じます。
+
+  1. 本ソフトウェアの全部または一部を複製すること
+  2. 本ソフトウェアを改変すること、または改変したものを公開・配布すること
+  3. 本ソフトウェアを再配布すること、または別のサイトやサービスとして公開すること
+  4. 本ソフトウェアを営利目的で利用すること
+
+次の行為は、許可なく行えます。
+
+  - 公開されているサイト（GitHub Pages）を閲覧し、利用すること
+  - GitHub 上でこのリポジトリを閲覧すること、および GitHub の利用規約が
+    認める範囲でフォークすること（フォークしたものにも上記の条件が適用されます）
+
+利用を希望する場合は、GitHub の Issue で作者に連絡してください。
+
+■ このライセンスの対象外
+
+次のものは第三者に権利があり、このライセンスの対象ではありません。
+それぞれの権利者の定める条件に従ってください。
+
+  - 「艦隊これくしょん -艦これ-」に関する名称・画像・ゲーム内データ
+    （DMM GAMES / C2 Preparat / KADOKAWA ほか、それぞれの権利者）
+  - poi-db（poi-server）のドロップ記録・建造記録
+  - 艦これ攻略Wiki の掲載内容
+  - api_start2、poi、KC3改 の各データ
+
+本サイトは非公式のファンサイトであり、上記の権利者とは関係がありません。
+
+■ 免責
+
+本ソフトウェアは現状のまま提供され、内容の正確性や動作について一切の保証をしません。
+本ソフトウェアの利用によって生じた損害について、作者は責任を負いません。
+
+------------------------------------------------------------------------
+
+Terms of use (English)
+
+All rights in the source code, design, text and aggregated result files in this
+repository that were created by the author ("the Software") are reserved by
+the author (yss19411208).
+
+Without prior permission from the author, you may not copy, modify, redistribute,
+republish or commercially use the Software, in whole or in part. You may view the
+published site and this repository, and fork the repository to the extent the
+GitHub Terms of Service allow; these terms continue to apply to any fork.
+
+Third-party names, images and data (Kantai Collection game content, poi-db
+records, the KanColle wiki, api_start2, poi and KC3Kai data) belong to their
+respective owners and are not covered by these terms.
+
+The Software is provided "as is", without warranty of any kind.
