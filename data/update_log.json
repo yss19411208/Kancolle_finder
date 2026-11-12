@@ -176,5 +176,35 @@
       "7-3-P 木曾"
     ],
     "notes": []
+  },
+  {
+    "at": "2026/11/12 20:01:12",
+    "trigger": "push",
+    "drop_records": 16079785,
+    "drop_added": 0,
+    "build_records": 122507,
+    "build_added": 0,
+    "data_to": "2026/11/12 01:02:19",
+    "months": [
+      "2026-09",
+      "2026-10",
+      "2026-11"
+    ],
+    "cutoff": "2026/11/11 18:00:00",
+    "limited": 127,
+    "resident": 10845,
+    "limited_added_n": 1,
+    "limited_removed_n": 0,
+    "resident_added_n": 0,
+    "resident_removed_n": 0,
+    "limited_added": [
+      "1-2-E Salmon"
+    ],
+    "limited_removed": [],
+    "resident_added": [],
+    "resident_removed": [],
+    "notes": [
+      "当月ダンプは取得済みのものを使用 (2026/11/12 19:05:19 取得)"
+    ]
   }
 ]
