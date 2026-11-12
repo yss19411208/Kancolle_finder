@@ -1,0 +1,72 @@
+name: データ更新
+
+on:
+  schedule:
+    - cron: "17 22 * * *"   # 毎日 07:17 (日本時間)
+  workflow_dispatch:         # 手動実行 / 管理画面の「再集計」ボタン
+  push:                      # 管理画面で設定を保存したら自動で再集計
+    branches: [main]
+    paths:
+      - admin_config.json
+      - Normal_Drop_Ship.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data-update
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 月ごとの集計結果 (state ブランチ) を取得
+        run: |
+          if git ls-remote --exit-code --heads origin state >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch state \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" state
+            rm -rf state/.git
+          else
+            mkdir -p state
+          fi
+          ls -la state
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install --quiet -r scripts/requirements.txt
+
+      - name: ダンプを取得して集計
+        run: python scripts/update.py --state-dir state
+
+      - name: 結果を main にコミット
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Drop_Data.json Build_Data.json Update.json data/
+          if git diff --cached --quiet; then
+            echo "変更なし"
+          else
+            git commit --quiet -m "データ自動更新 $(TZ=Asia/Tokyo date '+%Y/%m/%d %H:%M')"
+            for i in 1 2 3; do
+              git push && break
+              git pull --rebase --quiet   # 管理画面からの保存と重なった場合
+              sleep 5
+            done
+          fi
+
+      - name: 集計結果を state ブランチに保存 (履歴は残さない)
+        run: |
+          cd state
+          git init --quiet -b state
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "state $(TZ=Asia/Tokyo date '+%Y/%m/%d %H:%M')" || exit 0
+          git push --quiet --force \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" state

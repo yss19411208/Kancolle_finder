@@ -1,0 +1,406 @@
+'use strict';
+// 管理画面。データはすべて GitHub 上の JSON で、/api/file/<key> 経由で読み書きする。
+const TYPES = ['戦艦級', '航空母艦', '重巡級', '軽巡級', '駆逐艦', '海防艦', '潜水艦', '補助艦艇'];
+const CSRF = document.querySelector('meta[name=csrf]').content;
+const $ = id => document.getElementById(id);
+const S = { config: null, resident: null, history: null, drop: null, master: null, routes: null, sha: {} };
+const dirty = new Set();
+
+// ---------------------------------------------------------------- 共通
+function el(tag, props, ...children) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === 'class') e.className = v;
+    else if (k === 'on') for (const [ev, fn] of Object.entries(v)) e.addEventListener(ev, fn);
+    else if (k in e) e[k] = v;
+    else e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) if (c !== null && c !== undefined) e.append(c);
+  return e;
+}
+let toastTimer;
+function toast(msg, isErr) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isErr ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = ''; }, isErr ? 7000 : 3000);
+}
+async function api(path, body) {
+  const opt = body === undefined ? {} : {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF }, body: JSON.stringify(body),
+  };
+  const r = await fetch(path, opt);
+  if (r.status === 401) { location.href = '/login'; throw new Error('ログインし直してください'); }
+  const j = await r.json().catch(() => ({ error: `エラー ${r.status}` }));
+  if (!r.ok) throw new Error(j.error || `エラー ${r.status}`);
+  return j;
+}
+function markDirty(key) {
+  dirty.add(key);
+  document.body.classList.add('dirty');
+}
+const pad = n => String(n).padStart(2, '0');
+function fmt(d) {   // Date -> 'YYYY/MM/DD HH:MM:SS' (日本時間)
+  const j = new Date(d.getTime() + 9 * 3600e3);
+  return `${j.getUTCFullYear()}/${pad(j.getUTCMonth() + 1)}/${pad(j.getUTCDate())} ${pad(j.getUTCHours())}:${pad(j.getUTCMinutes())}:${pad(j.getUTCSeconds())}`;
+}
+function parse(s) { // 'YYYY/MM/DD HH:MM:SS' (日本時間) -> epoch ms
+  const m = /^(\d{4})\/(\d{2})\/(\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(s || '');
+  return m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4] - 9, +m[5], +m[6]) : NaN;
+}
+function fromInput(v) { // datetime-local の値 (日本時間として扱う) -> 'YYYY/MM/DD HH:MM:SS'
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(v || '');
+  return m ? `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}:${m[6] || '00'}` : null;
+}
+const norm = s => String(s).replace(/[\s　]/g, '').toLowerCase();
+const mapCmp = (a, b) => { const [a1, a2] = a.split('-').map(Number), [b1, b2] = b.split('-').map(Number); return a1 - b1 || a2 - b2; };
+const nodeCmp = (a, b) => a.localeCompare(b, 'en', { numeric: true });
+const splitNames = s => s.split(/[、,\n]+/).map(x => x.trim()).filter(Boolean);
+let nameByNorm = {}, tiByNorm = {};
+function canon(name) { return nameByNorm[norm(name)] || name.trim(); }
+
+// ---------------------------------------------------------------- 読み込み
+async function loadAll() {
+  const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes'];
+  const res = await Promise.all(keys.map(k => api('/api/file/' + k)));
+  keys.forEach((k, i) => { S[k] = res[i].content; S.sha[k] = res[i].sha; });
+  S.config = Object.assign({ updates: [], end_dates: [], limited_manual: [], limited_exclude: [] }, S.config || {});
+  S.resident = S.resident || {};
+  S.history = Array.isArray(S.history) ? S.history : [];
+  nameByNorm = {}; tiByNorm = {};
+  const ids = Object.keys(S.master || {}).map(Number).sort((a, b) => b - a);
+  for (const id of ids) { const v = S.master[id]; nameByNorm[norm(v.name)] = v.name; tiByNorm[norm(v.name)] = v.ti; }
+  const dl = $('shipNames');
+  dl.replaceChildren(...Object.values(nameByNorm).sort((a, b) => a.localeCompare(b, 'ja')).map(n => el('option', { value: n })));
+  dirty.clear();
+  document.body.classList.remove('dirty');
+  renderAll();
+}
+function renderAll() {
+  renderDash(); renderUpdates(); fillMapSelects(); renderResident(); renderLimited(); renderEnds(); renderHistory();
+}
+
+// ---------------------------------------------------------------- 保存
+async function save(key, btn) {
+  if (key === 'resident') readResidentTable();
+  const label = { config: '設定', resident: '常駐リスト', history: '更新履歴' }[key];
+  btn.disabled = true;
+  try {
+    const r = await api('/api/file/' + key, { content: S[key], sha: S.sha[key], message: `管理画面: ${label}を更新` });
+    S.sha[key] = r.sha;
+    dirty.delete(key);
+    if (!dirty.size) document.body.classList.remove('dirty');
+    toast(key === 'history' ? '保存しました' : '保存しました。再集計が自動で始まります（数分後に公開ページへ反映）');
+    setTimeout(loadRuns, 4000);
+  } catch (e) {
+    toast(e.message, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---------------------------------------------------------------- 状況
+function renderDash() {
+  const d = S.drop || {};
+  let nLim = 0, nMan = 0;
+  for (const nodes of Object.values(d.maps || {})) for (const v of Object.values(nodes)) for (const r of v.ships) {
+    if (r[2]) { nLim++; if (r[7] === 'manual') nMan++; }
+  }
+  const rows = [
+    ['最終集計', d.generated || '未実行'],
+    ['集計対象の報告', d.records ? `${d.records.toLocaleString()} 件（${d.data_from || '?'} ～ ${d.data_to || '?'}）` : 'なし'],
+    ['有効なアップデート日時', d.cutoff || 'なし（全期間）'],
+    ['限定ドロップ', `${nLim} 件（うち手動 ${nMan} 件）`],
+    ['海域数', Object.keys(d.maps || {}).length],
+  ];
+  $('dashInfo').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, String(v))]));
+}
+async function loadRuns() {
+  try {
+    const { runs } = await api('/api/runs');
+    const ev = { schedule: '毎日の自動実行', workflow_dispatch: '手動', push: '設定の保存' };
+    $('runsTable').tBodies[0].replaceChildren(...runs.map(r => {
+      const st = r.status !== 'completed' ? ['実行中', 'wait'] : r.conclusion === 'success' ? ['成功', 'ok'] : [r.conclusion || '失敗', 'ng'];
+      return el('tr', {},
+        el('td', { class: 'num' }, fmt(new Date(r.created_at))),
+        el('td', {}, ev[r.event] || r.event),
+        el('td', {}, el('span', { class: 'tag ' + st[1] }, st[0])),
+        el('td', {}, el('a', { href: r.url, target: '_blank', rel: 'noopener' }, 'ログ')));
+    }));
+    return runs;
+  } catch (e) { toast(e.message, true); return []; }
+}
+
+// ---------------------------------------------------------------- アップデート日時
+function renderUpdates() {
+  const now = Date.now();
+  const list = S.config.updates.slice().sort((a, b) => parse(b.at) - parse(a.at));
+  const eff = list.find(u => parse(u.at) <= now);
+  $('updTable').tBodies[0].replaceChildren(...list.map(u => {
+    const t = parse(u.at);
+    const tag = t > now ? ['予約（未来）', 'wait'] : u === eff ? ['有効', 'ok'] : ['過去', ''];
+    return el('tr', {},
+      el('td', { class: 'num' }, u.at), el('td', {}, u.note || ''),
+      el('td', {}, el('span', { class: 'tag ' + tag[1] }, tag[0])),
+      el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { S.config.updates.splice(S.config.updates.indexOf(u), 1); markDirty('config'); renderUpdates(); } } }, '削除')));
+  }));
+}
+
+// ---------------------------------------------------------------- 常駐リスト
+function fillMapSelects() {
+  const maps = [...new Set([...Object.keys(S.resident), ...Object.keys(S.routes || {})])].sort(mapCmp);
+  const opts = (first) => [...(first ? [el('option', { value: '' }, first)] : []), ...maps.map(m => el('option', { value: m }, m))];
+  const cur = $('resMap').value;
+  $('resMap').replaceChildren(...Object.keys(S.resident).sort(mapCmp).map(m => el('option', { value: m }, m)));
+  if (cur && S.resident[cur]) $('resMap').value = cur;
+  $('manMap').replaceChildren(...opts());
+  $('endMap').replaceChildren(...opts('全海域'));
+}
+function renderResident() {
+  const m = $('resMap').value;
+  const nodes = S.resident[m] || {};
+  const head = el('tr', {}, el('th', {}, 'マス'), ...TYPES.map(t => el('th', {}, t)));
+  const rows = Object.keys(nodes).sort(nodeCmp).map(node => el('tr', { 'data-node': node },
+    el('td', { class: 'node' }, node, el('br'),
+      el('button', { class: 'btn small danger', on: { click: () => { if (confirm(`${m}-${node} を削除しますか？`)) { readResidentTable(); delete S.resident[m][node]; markDirty('resident'); renderResident(); } } } }, '削除')),
+    ...nodes[node].map((names, ti) => el('td', { class: 'c' + ti },
+      el('textarea', { rows: Math.max(2, Math.ceil(names.join('、').length / (ti === 4 ? 17 : 7))), value: names.join('、'), on: { input: () => markDirty('resident'), change: checkResidentNames } })))));
+  $('resTable').replaceChildren(el('thead', {}, head), el('tbody', {}, ...rows));
+  $('resTable').dataset.map = m;
+  checkResidentNames();
+}
+function readResidentTable() {
+  const m = $('resTable').dataset.map;
+  if (!m || !S.resident[m]) return;
+  for (const tr of $('resTable').tBodies[0].rows) {
+    S.resident[m][tr.dataset.node] = [...tr.querySelectorAll('textarea')].map(t => [...new Set(splitNames(t.value).map(canon))]);
+  }
+}
+function checkResidentNames() {
+  const bad = new Set();
+  for (const t of $('resTable').querySelectorAll('textarea')) for (const n of splitNames(t.value)) if (!nameByNorm[norm(n)]) bad.add(n);
+  $('resWarn').textContent = bad.size ? `艦名マスターに無い名前: ${[...bad].join('、')}` : '';
+}
+
+// Wiki HTML -> {map: {node: [8 分類の艦名配列]}} (青字は除く)
+function parseWiki(html) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  const out = {};
+  for (const h of doc.querySelectorAll('h4')) {
+    const mm = /^(\d-\d)\./.exec(h.textContent.trim());
+    if (!mm) continue;
+    let n = h.nextElementSibling, table = null;
+    for (let i = 0; n && i < 6 && !table; i++, n = n.nextElementSibling) table = n.matches('table') ? n : n.querySelector('table');
+    if (!table) continue;
+    for (const tr of table.querySelectorAll('tbody tr')) {
+      const tds = tr.children;
+      if (tds.length < 9) continue;
+      const head = tds[0].cloneNode(true);
+      head.querySelectorAll('br').forEach(b => b.replaceWith(' '));   // 「C<br>ボス」「G<br>第一<br>ボス」
+      const node = head.textContent.trim().split(/\s+/)[0];
+      if (!node) continue;
+      const cols = [];
+      for (let ti = 0; ti < 8; ti++) {
+        const tokens = [];
+        const walk = (nd, blue) => {
+          for (const c of nd.childNodes) {
+            if (c.nodeType === 3) { if (!blue) tokens.push(...c.textContent.split(/[、,\s　]+/).filter(Boolean)); }
+            else if (c.nodeType === 1) {
+              if (c.tagName === 'SUP' || /note/.test(c.className || '')) continue;   // 脚注の番号
+              const col = (c.style && c.style.color || '').toLowerCase();
+              walk(c, blue || col === 'blue' || col === 'rgb(0, 0, 255)');
+            }
+          }
+        };
+        walk(tds[ti + 1], false);
+        const names = [];
+        for (let i = 0; i < tokens.length;) {   // 「De Ruyter」など空白入りの艦名をつなぐ
+          let hit = 0;
+          for (const k of [3, 2, 1]) {
+            const cand = tokens.slice(i, i + k).join(' ').replace(/[※*]/g, '');
+            if (i + k <= tokens.length && nameByNorm[norm(cand)]) { names.push(nameByNorm[norm(cand)]); hit = k; break; }
+          }
+          if (!hit) { names.push(tokens[i].replace(/[※*]/g, '')); hit = 1; }
+          i += hit;
+        }
+        cols.push(names);
+      }
+      (out[mm[1]] = out[mm[1]] || {})[node] = cols;
+    }
+  }
+  return out;
+}
+function showWikiDiff(wiki) {
+  readResidentTable();
+  const box = $('wikiDiff');
+  const lines = [];
+  const maps = [...new Set([...Object.keys(wiki), ...Object.keys(S.resident)])].sort(mapCmp);
+  for (const m of maps) {
+    const nodes = [...new Set([...Object.keys(wiki[m] || {}), ...Object.keys(S.resident[m] || {})])].sort(nodeCmp);
+    for (const node of nodes) {
+      const w = (wiki[m] || {})[node], r = (S.resident[m] || {})[node];
+      if (!w) { lines.push([`${m}-${node}`, [], ['（Wiki にこのマスがありません）']]); continue; }
+      if (!r) { lines.push([`${m}-${node}`, ['（常駐リストにこのマスがありません）'], []]); continue; }
+      const add = [], del = [];
+      for (let ti = 0; ti < 8; ti++) {
+        const ws = new Set(w[ti].map(norm)), rs = new Set(r[ti].map(norm));
+        for (const n of w[ti]) if (!rs.has(norm(n))) add.push(`${n}（${TYPES[ti]}）`);
+        for (const n of r[ti]) if (!ws.has(norm(n))) del.push(`${n}（${TYPES[ti]}）`);
+      }
+      if (add.length || del.length) lines.push([`${m}-${node}`, add, del]);
+    }
+  }
+  if (!Object.keys(wiki).length) { box.replaceChildren(el('p', { class: 'warn' }, '表を読み取れませんでした。「出撃ドロップ」ページの HTML か確認してください。')); return; }
+  box.className = 'diff';
+  box.replaceChildren(
+    el('p', {}, lines.length ? `差分 ${lines.length} マス（Wiki ${Object.keys(wiki).length} 海域を読み取り）` : `差分はありません（Wiki ${Object.keys(wiki).length} 海域を読み取り）`),
+    ...lines.map(([place, add, del]) => el('div', { class: 'd' },
+      el('a', { href: '#', on: { click: e => { e.preventDefault(); const m = place.split('-').slice(0, 2).join('-'); if (S.resident[m]) { $('resMap').value = m; renderResident(); window.scrollTo({ top: 0, behavior: 'smooth' }); } } } }, place), ' ',
+      add.length ? el('span', { class: 'add' }, 'Wiki にあり常駐リストに無い: ' + add.join('、') + ' ') : null,
+      del.length ? el('span', { class: 'del' }, '常駐リストにあり Wiki に無い: ' + del.join('、')) : null)));
+}
+
+// ---------------------------------------------------------------- 限定ドロップ
+function autoLimited() {
+  const out = [];
+  for (const [m, nodes] of Object.entries((S.drop || {}).maps || {})) for (const [node, v] of Object.entries(nodes)) for (const r of v.ships) {
+    if (r[2] && r[7] === 'auto') out.push({ map: m, node, ship: r[0], ti: r[1], rate: r[3], drops: r[4], n: r[5] });
+  }
+  return out.sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'));
+}
+const same = (a, b) => a.map === b.map && a.node === b.node && norm(a.ship) === norm(b.ship);
+function renderLimited() {
+  const q = norm($('limFilter').value);
+  const ex = S.config.limited_exclude;
+  const rows = autoLimited().filter(a => !q || norm(a.map + a.node + a.ship).includes(q)).map(a => {
+    const excluded = ex.some(e => same(e, a));
+    return el('tr', {},
+      el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
+      el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
+      el('td', { class: 'num' }, `${a.drops} / ${a.n}`),
+      el('td', {}, excluded ? el('span', { class: 'tag' }, '除外予定') : [
+        el('button', { class: 'btn small', on: { click: () => { ex.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config'); renderLimited(); } } }, '除外'), ' ',
+        el('button', { class: 'btn small', on: { click: () => toResident(a) } }, '常駐へ')]));
+  });
+  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 6 }, '該当なし'))]));
+
+  const man = S.config.limited_manual;
+  $('manTable').tBodies[0].replaceChildren(...man.map(e => el('tr', {},
+    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), el('td', { class: 'num' }, e.added || ''),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { man.splice(man.indexOf(e), 1); markDirty('config'); renderLimited(); } } }, '削除')))));
+  $('exTable').tBodies[0].replaceChildren(...(ex.length ? ex.map(e => el('tr', {},
+    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config'); renderLimited(); } } }, '解除')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
+}
+function toResident(a) {
+  readResidentTable();
+  const m = S.resident[a.map] = S.resident[a.map] || {};
+  const cols = m[a.node] = m[a.node] || TYPES.map(() => []);
+  if (!cols[a.ti].some(n => norm(n) === norm(a.ship))) cols[a.ti].push(a.ship);
+  markDirty('resident');
+  fillMapSelects();
+  $('resMap').value = a.map;
+  renderResident();
+  toast(`${a.map}-${a.node} の常駐リストに ${a.ship} を追加しました。「常駐リスト」タブで保存してください`);
+}
+
+// ---------------------------------------------------------------- 終了日
+function renderEnds() {
+  const now = Date.now();
+  const list = S.config.end_dates;
+  $('endTable').tBodies[0].replaceChildren(...(list.length ? list.map(e => el('tr', {},
+    el('td', {}, e.ship), el('td', {}, e.map || '全海域'), el('td', {}, e.node || '全マス'), el('td', { class: 'num' }, e.end),
+    el('td', {}, parse(e.end) > now ? el('span', { class: 'tag wait' }, '予約（未来）') : el('span', { class: 'tag ok' }, '適用中')),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { list.splice(list.indexOf(e), 1); markDirty('config'); renderEnds(); } } }, '削除')))) : [el('tr', {}, el('td', { colSpan: 6 }, 'なし'))]));
+}
+
+// ---------------------------------------------------------------- 更新履歴
+function renderHistory() {
+  const box = $('histList');
+  box.replaceChildren(...S.history.map((h, i) => el('div', { class: 'hist' },
+    el('div', { class: 'row' },
+      el('input', { type: 'text', value: h['更新日時'] || '', size: 12, on: { input: e => { h['更新日時'] = e.target.value; markDirty('history'); } } }),
+      h.auto ? el('span', { class: 'tag' }, '自動') : null,
+      el('span', { class: 'grow' }),
+      el('button', { class: 'btn small danger', on: { click: () => { S.history.splice(i, 1); markDirty('history'); renderHistory(); } } }, '削除')),
+    el('textarea', { rows: Math.max(2, (h['更新内容'] || []).length), value: (h['更新内容'] || []).join('\n'), on: { input: e => { h['更新内容'] = e.target.value.split('\n').map(x => x.trim()).filter(Boolean); markDirty('history'); } } }))).reverse());
+}
+
+// ---------------------------------------------------------------- イベント
+document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.tab !== 'resident') readResidentTable();
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + b.dataset.tab));
+}));
+document.querySelectorAll('.btn.save').forEach(b => b.addEventListener('click', () => save(b.dataset.save, b)));
+$('rerunBtn').addEventListener('click', async e => {
+  e.target.disabled = true;
+  try { await api('/api/rerun', {}); toast('再集計を開始しました'); setTimeout(loadRuns, 4000); }
+  catch (err) { toast(err.message, true); }
+  finally { setTimeout(() => { e.target.disabled = false; }, 5000); }
+});
+$('runsReload').addEventListener('click', async () => {
+  await loadRuns();
+  try { const r = await api('/api/file/drop'); S.drop = r.content; renderDash(); renderLimited(); } catch (e) { toast(e.message, true); }
+});
+$('updAdd').addEventListener('click', () => {
+  const at = fromInput($('updAt').value);
+  if (!at) return toast('日時を入力してください', true);
+  if (S.config.updates.some(u => u.at === at)) return toast('同じ日時が登録済みです', true);
+  S.config.updates.push({ at, note: $('updNote').value.trim() });
+  $('updAt').value = ''; $('updNote').value = '';
+  markDirty('config'); renderUpdates();
+});
+$('resMap').addEventListener('change', () => { readResidentTable(); renderResident(); });
+$('resAddNode').addEventListener('click', () => {
+  const m = $('resMap').value;
+  const node = (prompt(`${m} に追加するマス名（例: K）`) || '').trim();
+  if (!node) return;
+  readResidentTable();
+  if (S.resident[m][node]) return toast('そのマスは既にあります', true);
+  S.resident[m][node] = TYPES.map(() => []);
+  markDirty('resident'); renderResident();
+});
+$('resAddMap').addEventListener('click', () => {
+  const m = (prompt('追加する海域（例: 7-6）') || '').trim();
+  if (!/^\d+-\d+$/.test(m)) return m ? toast('「7-6」の形式で入力してください', true) : null;
+  readResidentTable();
+  if (!S.resident[m]) { S.resident[m] = {}; markDirty('resident'); }
+  fillMapSelects(); $('resMap').value = m; renderResident();
+});
+$('wikiFile').addEventListener('change', async e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try { showWikiDiff(parseWiki(await f.text())); } catch (err) { toast('解析に失敗しました: ' + err.message, true); }
+});
+$('limFilter').addEventListener('input', renderLimited);
+$('manAdd').addEventListener('click', () => {
+  const e = { map: $('manMap').value, node: $('manNode').value.trim(), ship: canon($('manShip').value), added: fmt(new Date()) };
+  if (!e.map || !e.node || !e.ship) return toast('海域・マス・艦名を入力してください', true);
+  if (!nameByNorm[norm(e.ship)] && !confirm(`「${e.ship}」は艦名マスターにありません。このまま追加しますか？`)) return;
+  if (S.config.limited_manual.some(x => same(x, e))) return toast('登録済みです', true);
+  S.config.limited_manual.push(e);
+  $('manShip').value = '';
+  markDirty('config'); renderLimited();
+});
+$('manClear').addEventListener('click', () => {
+  if (!S.config.limited_manual.length || !confirm(`手動で追加した ${S.config.limited_manual.length} 件をすべて削除しますか？（保存するまで確定しません）`)) return;
+  S.config.limited_manual = [];
+  markDirty('config'); renderLimited();
+});
+$('endAdd').addEventListener('click', () => {
+  const end = fromInput($('endAt').value), ship = canon($('endShip').value);
+  if (!ship || !end) return toast('艦名と終了日時を入力してください', true);
+  S.config.end_dates.push({ ship, map: $('endMap').value, node: $('endNode').value.trim(), end });
+  $('endShip').value = ''; $('endNode').value = ''; $('endAt').value = '';
+  markDirty('config'); renderEnds();
+});
+$('histAdd').addEventListener('click', () => {
+  S.history.push({ '更新日時': fmt(new Date()).slice(0, 10), '更新内容': [] });
+  markDirty('history'); renderHistory();
+});
+window.addEventListener('beforeunload', e => { if (dirty.size) { e.preventDefault(); e.returnValue = ''; } });
+$('logoutForm').addEventListener('submit', () => dirty.clear());
+
+loadAll().then(loadRuns).catch(e => toast(e.message, true));

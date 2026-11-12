@@ -1,0 +1,16 @@
+[Unit]
+Description=Kancolle finder admin
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=CHANGE_ME
+WorkingDirectory=/opt/Kancolle_finder/admin
+ExecStart=/opt/Kancolle_finder/admin/venv/bin/gunicorn --workers 1 --threads 4 --bind 127.0.0.1:8787 app:app
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

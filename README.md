@@ -29,58 +29,32 @@
 
 ```
 .
-├── index.html            # メインHTMLファイル
-├── cancolle_data3.json   # 艦娘ドロップデータ
-├── build_data.json       # 建造レシピデータ
-├── image/                # 海域マップ画像 (1-1.png 等)
-└── README.md             # このファイル
+├── index.html               # 公開ページ
+├── Drop_Data.json           # ドロップ情報とドロップ率（自動生成）
+├── Build_Data.json          # 建造レシピ（自動生成）
+├── Update.json              # 更新履歴（自動追記 + 管理画面で編集）
+├── Normal_Drop_Ship.json    # 常駐ドロップ（管理画面で編集）
+├── admin_config.json        # アップデート日時・終了日・手動の限定・除外（管理画面で編集）
+├── data/                    # 艦名・マス名のマスター（自動取得のキャッシュ）
+├── scripts/update.py        # 集計スクリプト
+├── .github/workflows/update.yml  # 毎日の自動更新
+├── admin/                   # 管理画面（自分のサーバーに置く。admin/README.md 参照）
+└── image/                   # 海域マップ画像
 ```
 
-## データ形式
+## データ更新の仕組み
 
-### cancolle_data3.json
+1. GitHub Actions が毎日 07:17 頃（日本時間）に [poi-server](https://github.com/poooi/poi-server/wiki) のダンプ（`dropshiprecords` / `createshiprecords`）を取得して集計します。管理画面で設定を保存したときと、手動実行でも動きます。
+2. ダンプは月初にリセットされるため、月ごとの集計結果を `state` ブランチに保存し、過去の月と合算します。ダンプ本体は保存しません。
+3. 艦ID→艦名は [api_start2](https://github.com/Tibowl/api_start2)、セルID→マス名は [poi](https://github.com/poooi/poi) と [KC3改](https://github.com/KC3Kai/KC3Kai) のデータを使います。
+4. **常駐**は `Normal_Drop_Ship.json` に載っている艦、**限定**は poi で観測されたが常駐リストに無い艦です。限定は、管理画面で登録したアップデート日時（現在時刻以前で最新のもの）以降の報告だけで集計します。
+5. ドロップ率は S勝利時の「その艦のドロップ数 ÷ そのマスの S勝利数」です。S勝利でのドロップが無い場合のみ A/B 勝利を含めて計算します。
 
-```json
-{
-  "長門": {
-    "map": {
-      "2-5": ["O"],
-      "3-3": ["M"]
-    },
-    "type": "低速戦艦",
-    "number": "80",
-    "modify": {
-      "長門改": "30",
-      "長門改二": "88"
-    }
-  }
-}
-```
+### 手元で実行する
 
-| キー | 内容 |
-|------|------|
-| `map` | ドロップ海域。`海域ID: [ノード, ...]` の形式 |
-| `type` | 艦種 |
-| `number` | 図鑑番号 |
-| `modify` | 改造先艦名と必要レベル |
-
-### build_data.json
-
-```json
-{
-  "長門": {
-    "build": [
-      {
-        "recipe": [400, 300, 600, 300],
-        "Dev": 3,
-        "count": 1500,
-        "rate": 2.5,
-        "big": false,
-        "ship": ["陸奥", "扶桑", "...]
-      }
-    ]
-  }
-}
+```sh
+pip install pymongo
+python scripts/update.py --state-dir state
 ```
 
 ## 技術スタック

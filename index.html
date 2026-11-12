@@ -253,6 +253,15 @@ header {
   border: 1px solid; letter-spacing: .04em; flex-shrink: 0;
 }
 .badge.limited { color: var(--limited); background: var(--limited-bg); border-color: var(--limited-bd); }
+.drop-rate { margin-left: auto; font-size: 12px; font-weight: 700; color: var(--blue); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.drop-rate.none { color: #a8b3c8; font-weight: 400; }
+.drop-rate small { font-weight: 400; color: var(--text-sub); margin-left: 4px; }
+.badge.boss { color: #a01818; background: #fdecec; border-color: #e0a0a0; margin-left: 8px; }
+.rate-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 6px 0 10px; }
+.rate-table td { padding: 4px 8px; border-bottom: 1px solid var(--border); }
+.rate-table td.r { text-align: right; font-variant-numeric: tabular-nums; font-weight: 700; color: var(--blue); }
+.rate-table td.n { text-align: right; color: var(--text-sub); font-size: 11px; }
+.data-note { font-size: 11px; color: var(--text-sub); margin-top: 6px; }
 .badge.big { color: var(--gold); background: var(--gold-bg); border-color: var(--gold-bd); }
 
 /* ---- チップリスト ---- */
@@ -441,7 +450,7 @@ header {
 
   <!-- ===== 海域モード ===== -->
   <div id="mapArea" class="search-box">
-    <div class="notice">海域を選択するとノードごとのドロップが表示されます。橙色は限定ドロップです。艦名をクリックすると詳細が開きます。</div>
+    <div class="notice">海域を選択するとノードごとのドロップが表示されます。橙色は限定ドロップです。艦名をクリックすると詳細が開きます。<span id="dataNote"></span></div>
     <div class="world-filter" id="worldFilter"></div>
     <div class="form-row" style="margin-bottom:10px">
       <select class="form-select" id="mapSelect"></select>
@@ -523,10 +532,12 @@ header {
 const TYPE_LABELS = ['戦艦系','空母系','重巡系','軽巡系','駆逐艦','海防艦','潜水艦','その他'];
 const $ = id => document.getElementById(id);
 
-let mapData  = {};  // mapData[map][node] = [{ship, ti, normal:bool, limited:bool}]
-let shipData = {};  // shipData[name]     = {ti, drops:[{map,node,normal,limited}]}
+let mapData  = {};  // mapData[map][node] = [{ship, ti, normal, limited, rate, drops, n, basis}]
+let nodeMeta = {};  // nodeMeta[map][node] = {boss, n}
+let shipData = {};  // shipData[name]     = {ti, drops:[{map,node,normal,limited,rate,drops,n,basis}]}
 let BUILD    = {};  // BUILD[name]        = [recipe entries]
 let UPDATE   = [];
+let DROP_INFO = {};
 
 let currentWorld   = 'all';
 let currentMapSrc  = 'all';
@@ -539,32 +550,36 @@ let searchTimer    = null;
 // ============================================================
 //  データ前処理
 // ============================================================
-function ingest(raw, srcKey) {
-  for (const [map, nodes] of Object.entries(raw)) {
-    if (!mapData[map]) mapData[map] = {};
-    for (const [node, typeArrays] of Object.entries(nodes)) {
-      if (!mapData[map][node]) mapData[map][node] = [];
-      for (let ti = 0; ti < typeArrays.length; ti++) {
-        for (const ship of (typeArrays[ti] || [])) {
-          // mapData
-          let me = mapData[map][node].find(e => e.ship === ship);
-          if (!me) {
-            me = { ship, ti, normal: false, limited: false };
-            mapData[map][node].push(me);
-          }
-          me[srcKey] = true;
-          // shipData
-          if (!shipData[ship]) shipData[ship] = { ti, drops: [] };
-          let de = shipData[ship].drops.find(d => d.map === map && d.node === node);
-          if (!de) {
-            de = { map, node, normal: false, limited: false };
-            shipData[ship].drops.push(de);
-          }
-          de[srcKey] = true;
-        }
+// Drop_Data.json: maps[map][node] = {boss, n, ships:[[艦名, 艦種, 限定(0/1), 率%, ドロップ数, 戦闘数, 基準, 出所]]}
+function ingestDrop(data) {
+  DROP_INFO = data || {};
+  for (const [map, nodes] of Object.entries(DROP_INFO.maps || {})) {
+    mapData[map] = {}; nodeMeta[map] = {};
+    for (const [node, v] of Object.entries(nodes)) {
+      nodeMeta[map][node] = { boss: !!v.boss, n: v.n || 0 };
+      mapData[map][node] = [];
+      for (const [ship, ti, lim, rate, drops, n, basis] of v.ships) {
+        const e = { ship, ti, normal: !lim, limited: !!lim, rate, drops, n, basis };
+        mapData[map][node].push(e);
+        if (!shipData[ship]) shipData[ship] = { ti, drops: [] };
+        shipData[ship].drops.push({ map, node, normal: !lim, limited: !!lim, rate, drops, n, basis });
       }
     }
   }
+}
+
+function rateText(e) {
+  return (e.rate === null || e.rate === undefined) ? '' : e.rate + '%';
+}
+function rateTitle(e) {
+  if (e.rate === null || e.rate === undefined) return 'poiの統計に報告なし';
+  return `${e.basis === 'S' ? 'S勝利' : 'S/A/B勝利'} ${Number(e.n).toLocaleString()}回中 ${Number(e.drops).toLocaleString()}回`;
+}
+function nodeCmp(a, b) { return a.localeCompare(b, 'en', { numeric: true }); }
+// 「A:10%・C:20%」形式
+function nodeRates(list) {
+  return list.slice().sort((x, y) => nodeCmp(x.node, y.node))
+    .map(x => x.node + (rateText(x) ? ':' + rateText(x) : '')).join('・');
 }
 
 // ============================================================
@@ -692,7 +707,7 @@ function showMap() {
   let html = `<div class="card"><div class="card-header" style="cursor:default">${map}</div>`;
   html += mediaHtml(map, 'lg');
 
-  for (const node of Object.keys(mapData[map]).sort()) {
+  for (const node of Object.keys(mapData[map]).sort(nodeCmp)) {
     const all = mapData[map][node];
 
     // 厳密フィルター：「限定のみ」のとき limited===true のものだけ
@@ -714,14 +729,15 @@ function showMap() {
     if (limCnt > 0) cntStr += ` (限定${limCnt})`;
     const nodeId = `node_${map.replace('-','_')}_${node}`;
 
-    html += `<div class="node-header" onclick="toggleNode('${nodeId}')">ノード ${node}<span class="node-count">${cntStr}</span><span class="node-toggle" id="tog_${nodeId}">▶</span></div>`;
+    html += `<div class="node-header" onclick="toggleNode('${nodeId}')">ノード ${node}${nodeMeta[map]?.[node]?.boss ? '<span class="badge boss">ボス</span>' : ''}<span class="node-count">${cntStr}</span><span class="node-toggle" id="tog_${nodeId}">▶</span></div>`;
     html += `<div class="node-body" id="${nodeId}">`;
     for (let ti = 0; ti < TYPE_LABELS.length; ti++) {
       if (!byType[ti]?.length) continue;
       html += `<div class="type-header">${TYPE_LABELS[ti]}</div>`;
       for (const e of byType[ti].sort((a,b) => a.ship.localeCompare(b.ship,'ja'))) {
         const limBadge = e.limited === true ? '<span class="badge limited">限定</span>' : '';
-        html += `<div class="drop-row" onclick="openModal('${esc(e.ship)}')">${limBadge}<span class="ship-name">${e.ship}</span></div>`;
+        const rt = rateText(e);
+        html += `<div class="drop-row" onclick="openModal('${esc(e.ship)}')" title="${rateTitle(e)}">${limBadge}<span class="ship-name">${e.ship}</span><span class="drop-rate${rt ? '' : ' none'}">${rt || '—'}</span></div>`;
       }
     }
     html += `</div>`;
@@ -832,7 +848,7 @@ function buildShipCard(ship) {
   } else {
     for (const map of maps) {
       const md    = drops.filter(x => x.map === map);
-      const nodes = [...new Set(md.map(x => x.node))].sort().join('・');
+      const nodes = nodeRates(md);
       const isLim = md.some(x => x.limited === true);
       html += `<span class="chip${isLim?' lim':''}" onclick="openModal('${esc(ship)}')">${map}<span class="chip-nodes">${nodes}</span></span>`;
     }
@@ -869,13 +885,13 @@ function renderDrop(ship) {
   const limCnt  = drops.filter(x => x.limited === true).length;
   const normCnt = drops.filter(x => x.normal  === true).length;
 
+  if (!maps.length) return '<div class="no-data">ドロップ情報なし（建造・任務・イベント報酬など）</div>';
   let html = '<div class="chip-list">';
   for (const map of maps) {
     const md    = drops.filter(x => x.map === map);
-    const nodes = [...new Set(md.map(x => x.node))].sort().join('・');
     const isLim = md.some(x => x.limited === true);
     const sid   = `md_${map.replace('-','_')}`;
-    html += `<span class="chip${isLim?' lim':''}" onclick="scrollInModal('${sid}')">${map}<span class="chip-nodes">${nodes}</span></span>`;
+    html += `<span class="chip${isLim?' lim':''}" onclick="scrollInModal('${sid}')">${map}<span class="chip-nodes">${nodeRates(md)}</span></span>`;
   }
   html += '</div>';
   html += `<div class="stat-bar">
@@ -884,14 +900,19 @@ function renderDrop(ship) {
     <span>限定: <strong class="lim">${limCnt}</strong></span>
   </div>`;
   for (const map of maps) {
-    const md    = drops.filter(x => x.map === map);
-    const nodes = [...new Set(md.map(x => x.node))].sort().join('・');
+    const md    = drops.filter(x => x.map === map).sort((x, y) => nodeCmp(x.node, y.node));
     const isLim = md.some(x => x.limited === true);
     const sid   = `md_${map.replace('-','_')}`;
     html += `<div class="map-subtitle" id="${sid}">${map}`;
-    html += `<span style="font-size:12px;font-weight:400;color:var(--text-sub)">ノード: ${nodes}</span>`;
     if (isLim) html += `<span class="badge limited">限定あり</span>`;
     html += `</div>`;
+    html += '<table class="rate-table">';
+    for (const x of md) {
+      const boss = nodeMeta[map]?.[x.node]?.boss ? '<span class="badge boss">ボス</span>' : '';
+      const lim  = x.limited ? '<span class="badge limited">限定</span>' : '';
+      html += `<tr><td>ノード ${x.node}${boss}${lim}</td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
+    }
+    html += '</table>';
     html += mediaHtml(map, 'sm');
   }
   return html;
@@ -920,19 +941,21 @@ function renderBuild(ship) {
     <thead><tr>
       <th>レシピ（燃/弾/鋼/ボ/資材）</th>
       ${th('Count','試行数')}
+      ${th('hit','出現数')}
       ${th('rate','確率')}
       ${th('score','スコア')}
       <th>秘書艦</th>
     </tr></thead><tbody>`;
 
   for (const r of rows) {
-    const isBig    = (r.recipe[4] || 0) >= 20;
+    const isBig    = r.big === true || (r.recipe[0] || 0) >= 1500;
     const bigBadge = isBig ? ' <span class="badge big">大型</span>' : '';
     const tags     = (r.FirstShip||[]).slice(0,12).map(s=>`<span class="ship-tag">${s}</span>`).join('');
     const more     = (r.FirstShip||[]).length>12 ? `<span class="ship-tag">他${(r.FirstShip||[]).length-12}艦</span>` : '';
     html += `<tr>
       <td><span class="recipe-text">${r.recipe.join(' / ')}</span>${bigBadge}</td>
       <td>${(r.Count||0).toLocaleString()}</td>
+      <td>${(r.hit||0).toLocaleString()}</td>
       <td>${r.rate}%</td>
       <td>${r.score}</td>
       <td><div class="first-ships">${tags}${more}</div></td>
@@ -1017,27 +1040,11 @@ $('mapSelect').onchange = showMap;
 // ============================================================
 //  建造データ計算
 // ============================================================
-function computeBuild(shipRaw, recipeRaw) {
+// Build_Data.json: ships[艦名] = [{recipe, Count(レシピの試行数), hit(その艦が出た数), rate, big, FirstShip}]
+function computeBuild(raw) {
   const result = {};
-  for (const [ship, val] of Object.entries(shipRaw)) {
-    const recipes = val?.items?.items || [];
-    const seen    = new Set();
-    const entries = [];
-    for (const recipeArr of recipes) {
-      const key = recipeArr.join('/');
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const all = recipeRaw[key];
-      if (!all || !all.length) continue;
-      const total    = all.length;
-      const matching = all.filter(e => e[0] === ship);
-      if (!matching.length) continue;
-      const rate  = Math.round(matching.length / total * 10000) / 100;
-      const score = Math.round(rate * Math.sqrt(total) * 100) / 100;
-      const secretaries = [...new Set(matching.map(e => e[1]))];
-      entries.push({ recipe: recipeArr, Count: total, rate, score, FirstShip: secretaries });
-    }
-    if (entries.length) result[ship] = entries;
+  for (const [ship, list] of Object.entries((raw && raw.ships) || {})) {
+    result[ship] = list.map(r => ({ ...r, score: Math.round(r.rate * Math.sqrt(r.Count) * 100) / 100 }));
   }
   return result;
 }
@@ -1045,17 +1052,22 @@ function computeBuild(shipRaw, recipeRaw) {
 // ============================================================
 //  初期化
 // ============================================================
+const getJson = (f, fb) => fetch(f, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(f + ' を読み込めません'); return r.json(); })
+  .catch(e => { if (fb === undefined) throw e; return fb; });
 Promise.all([
-  fetch('Normal_Drop_Ship.json').then(r=>r.json()),
-  fetch('Special_Drop.json').then(r=>r.json()),
-  fetch('Create_Ship_Data.json').then(r=>r.json()).catch(()=>({})),
-  fetch('Create_Ship_Recipe.json').then(r=>r.json()).catch(()=>({})),
-  fetch('Update.json').then(r=>r.json()).catch(()=>[])
-]).then(([normal, special, shipRaw, recipeRaw, update]) => {
-  ingest(normal,  'normal');
-  ingest(special, 'limited');
-  BUILD  = computeBuild(shipRaw, recipeRaw);
+  getJson('Drop_Data.json'),
+  getJson('Build_Data.json', {}),
+  getJson('Update.json', [])
+]).then(([drop, build, update]) => {
+  ingestDrop(drop);
+  BUILD  = computeBuild(build);
   UPDATE = Array.isArray(update) ? update : [];
+  // 建造でしか出ない艦も艦名検索に出す
+  for (const ship of Object.keys(BUILD)) if (!shipData[ship]) shipData[ship] = { ti: (build.types || {})[ship] ?? 7, drops: [], buildOnly: true };
+  $('dataNote').innerHTML = `<div class="data-note">％は poi 統計による S勝利時のドロップ率です（「—」は報告なし）。`
+    + (DROP_INFO.records ? `集計 ${Number(DROP_INFO.records).toLocaleString()} 件 / ` : '')
+    + `更新 ${DROP_INFO.generated || '不明'}`
+    + (DROP_INFO.cutoff ? ` / 限定は ${DROP_INFO.cutoff} 以降のデータ` : '') + `</div>`;
 
   buildWorldFilter();
   buildMapSelect();
@@ -1081,7 +1093,7 @@ Promise.all([
   &nbsp;/&nbsp;
   <a href="https://wikiwiki.jp/kancolle/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">艦これ Wiki</a>
   &nbsp;/&nbsp;
-  <a href="https://poi.io/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">poi Wiki</a>
+  <a href="https://github.com/poooi/poi-server/wiki" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">poi-server</a>
 </div>
 
 </body>
