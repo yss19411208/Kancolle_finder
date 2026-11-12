@@ -38,7 +38,7 @@ DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
 STATE_VERSION = 2
 MAX_ARCHIVE_MONTHS = 12  # さかのぼって取得する過去月の上限
-DATA_START_MONTH = "2026-11"   # 常駐ドロップの率はこの月から毎月積み上げる
+DATA_START_MONTH = "2026-09"   # 常駐ドロップの率はこの月から毎月積み上げる (開始時点で 3 か月分)
 RATE_MODES = ("node_s", "node_all", "map_all")
 SOURCES = [
     {"name": "poi-db ドロップ記録・建造記録 (poi-server)", "url": "https://github.com/poooi/poi-server/wiki",
@@ -865,21 +865,22 @@ def main():
                 except OSError:
                     pass
 
-        # 有効なアップデート日時が過去の月にある場合、その月から前月までのアーカイブを取り込む。
-        # (例: 10/22 のアップデートなら 10 月分。11 月分は上の当月ダンプ)
-        if cutoff is not None and not args.no_download:
+        # 過去の月はアーカイブから取り込む (一度取り込んだ月は再取得しない)。
+        #  - 常駐ドロップ用: DATA_START_MONTH から前月まで
+        #  - 限定ドロップ用: 有効なアップデート日時の月から前月まで (例: 10/22 なら 10 月分)
+        if not args.no_download:
             cur = month_of(now)
             months = []
-            mo = month_of(cutoff)
+            mo = DATA_START_MONTH if cutoff is None else min(DATA_START_MONTH, month_of(cutoff))
             while mo < cur:
                 months.append(mo)
                 mo = next_month(mo)
             if len(months) > MAX_ARCHIVE_MONTHS:
-                warn(f"アップデート日時が古いため、直近 {MAX_ARCHIVE_MONTHS} か月分だけ取り込みます")
+                warn(f"対象期間が長いため、直近 {MAX_ARCHIVE_MONTHS} か月分だけ取り込みます")
                 months = months[-MAX_ARCHIVE_MONTHS:]
             for mo in months:
                 st = drop_states.get(mo)
-                in_month = month_start(mo) <= cutoff < month_start(next_month(mo))
+                in_month = cutoff is not None and month_start(mo) <= cutoff < month_start(next_month(mo))
                 if st and st.get("final") and (not in_month or cutoff in st.get("cuts", [])):
                     continue   # 取り込み済み
                 url = archive_url("dropshiprecords", mo)

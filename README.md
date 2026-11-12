@@ -46,7 +46,7 @@
 
 1. GitHub Actions が毎日 07:17 頃（日本時間）に [poi-server](https://github.com/poooi/poi-server/wiki) のダンプ（`dropshiprecords` / `createshiprecords`）を取得して集計します。管理画面で設定を保存したときと、手動実行でも動きます。
 2. ダンプは月初にリセットされるため、月ごとの集計結果を `state` ブランチに保存し、過去の月と合算します。ダンプ本体は保存しません。
-   アップデート日時が先月以前の場合は、その月から前月までの過去月アーカイブ（`https://db.poi.moe/`）も取り込みます。
+   常駐ドロップの率は 2026年9月分から積み上げます（過去の月は `https://db.poi.moe/` のアーカイブから一度だけ取り込み）。アップデート日時がそれより前の月にある場合は、その月の分も取り込みます。
 3. 艦ID→艦名は [api_start2](https://github.com/Tibowl/api_start2)、セルID→マス名は [poi](https://github.com/poooi/poi) と [KC3改](https://github.com/KC3Kai/KC3Kai) のデータを使います。
 4. **常駐**は `Normal_Drop_Ship.json` に載っている艦、**限定**は poi で観測されたが常駐リストに無い艦です。限定は、管理画面で登録したアップデート日時（現在時刻以前で最新のもの）以降の報告だけで、秒単位で区切って集計します。
 5. ドロップ率は S勝利時の「その艦のドロップ数 ÷ そのマスの S勝利数」です。S勝利でのドロップが無い場合のみ A/B 勝利を含めて計算します。
