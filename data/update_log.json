@@ -426,5 +426,42 @@
     "notes": [
       "当月ダンプは取得済みのものを使用 (2026/11/13 07:19:53 取得)"
     ]
+  },
+  {
+    "at": "2026/11/13 08:47:34",
+    "trigger": "workflow_dispatch",
+    "drop_records": 16281402,
+    "drop_added": 0,
+    "build_records": 134060,
+    "build_added": 0,
+    "data_to": "2026/11/13 01:02:40",
+    "months": [
+      "2026-09",
+      "2026-10",
+      "2026-11"
+    ],
+    "cutoff": "2026/11/11 18:00:00",
+    "limited": 157,
+    "resident": 10840,
+    "limited_added_n": 4,
+    "limited_removed_n": 0,
+    "resident_added_n": 0,
+    "resident_removed_n": 5,
+    "limited_added": [
+      "2-3-N 岸波",
+      "3-1-C 天霧",
+      "3-1-F 天霧",
+      "3-1-F 狭霧"
+    ],
+    "limited_removed": [],
+    "resident_added": [],
+    "resident_removed": [
+      "2-3-N 岸波",
+      "3-1-C 天霧",
+      "3-1-C 狭霧",
+      "3-1-F 天霧",
+      "3-1-F 狭霧"
+    ],
+    "notes": []
   }
 ]
