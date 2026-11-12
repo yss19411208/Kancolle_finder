@@ -22,7 +22,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
+      # 保存の直後に複数回起動された場合でも、常に最新の main で集計する
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: 月ごとの集計結果 (state ブランチ) を取得
         run: |
@@ -48,17 +51,26 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Drop_Data.json Build_Data.json Update.json data/
-          if git diff --cached --quiet; then
-            echo "変更なし"
-          else
+          for i in 1 2 3 4 5; do
+            git add Drop_Data.json Build_Data.json Update.json data/
+            if git diff --cached --quiet; then
+              echo "変更なし"
+              exit 0
+            fi
             git commit --quiet -m "データ自動更新 $(TZ=Asia/Tokyo date '+%Y/%m/%d %H:%M')"
-            for i in 1 2 3; do
-              git push && break
-              git pull --rebase --quiet   # 管理画面からの保存と重なった場合
-              sleep 5
-            done
-          fi
+            if git push --quiet; then
+              exit 0
+            fi
+            # 集計中に管理画面で保存されるなどして main が進んでいた場合:
+            # 生成ファイル同士をマージせず、最新の main に合わせて集計し直す (ダンプは取り直さない)
+            echo "main が更新されていたため、最新の設定で集計し直します ($i 回目)"
+            git fetch --quiet origin main
+            git reset --quiet --hard origin/main
+            python scripts/update.py --state-dir state --no-download
+            sleep $((i * 3))
+          done
+          echo "::error::main へのコミットに失敗しました"
+          exit 1
 
       - name: 集計結果を state ブランチに保存 (履歴は残さない)
         run: |
