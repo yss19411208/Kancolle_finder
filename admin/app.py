@@ -205,16 +205,12 @@ def validate(key, c):
     if key == "config":
         if not isinstance(c, dict):
             return "形式が不正です"
-        for k in ("updates", "end_dates", "limited_manual", "limited_exclude"):
+        for k in ("updates", "limited_manual", "limited_exclude"):
             if not isinstance(c.get(k), list):
                 return f"{k} がありません"
         for u in c["updates"]:
             if not (isinstance(u, dict) and is_str(u.get("at"), 19) and len(u["at"]) == 19):
                 return "アップデート日時は YYYY/MM/DD HH:MM:SS で入力してください"
-        for e in c["end_dates"]:
-            if not (isinstance(e, dict) and is_str(e.get("ship")) and e["ship"]
-                    and is_str(e.get("end"), 19) and len(e["end"]) == 19):
-                return "終了日の艦名と日時を確認してください"
         for e in c["limited_manual"] + c["limited_exclude"]:
             if not (isinstance(e, dict) and all(is_str(e.get(k)) and e[k] for k in ("map", "node", "ship"))):
                 return "限定ドロップの 海域 / マス / 艦名 を確認してください"

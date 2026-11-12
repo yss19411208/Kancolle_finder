@@ -42,7 +42,7 @@ jobs:
       - run: pip install --quiet -r scripts/requirements.txt
 
       - name: ダンプを取得して集計
-        run: python scripts/update.py --state-dir state
+        run: python scripts/update.py --state-dir state ${{ github.event_name == 'push' && '--smart' || '' }}
 
       - name: 結果を main にコミット
         run: |

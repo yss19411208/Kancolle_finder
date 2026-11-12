@@ -36,9 +36,37 @@ async function api(path, body) {
   if (!r.ok) throw new Error(j.error || `エラー ${r.status}`);
   return j;
 }
-function markDirty(key) {
-  dirty.add(key);
-  document.body.classList.add('dirty');
+function setDirty(key, on) {
+  if (on) dirty.add(key); else dirty.delete(key);
+  document.body.classList.toggle('dirty-' + key, on);
+}
+function setState(msg, isErr) {
+  const e = $('saveState');
+  e.textContent = msg;
+  e.className = isErr ? 'err' : '';
+}
+const clock = () => fmt(new Date()).slice(11);
+// 設定 (アップデート日時・限定・除外) は操作のたびにその場で保存する。常駐リストと更新履歴は「保存」ボタン。
+let saveChain = Promise.resolve();
+function saveConfig(what) {
+  setState('保存中…');
+  saveChain = saveChain.then(async () => {
+    try {
+      const r = await api('/api/file/config', { content: S.config, sha: S.sha.config, message: `管理画面: ${what}` });
+      S.sha.config = r.sha;
+      setState(`保存しました ${clock()}`);
+      watchRuns();
+    } catch (e) {
+      setState('保存できませんでした', true);
+      toast(e.message + '（最新の状態を読み込み直しました。もう一度操作してください）', true);
+      await loadAll().catch(() => {});
+    }
+  });
+  return saveChain;
+}
+function markDirty(key, what) {
+  if (key === 'config') return saveConfig(what || '設定を更新');
+  setDirty(key, true);
 }
 const pad = n => String(n).padStart(2, '0');
 function fmt(d) {   // Date -> 'YYYY/MM/DD HH:MM:SS' (日本時間)
@@ -65,7 +93,8 @@ async function loadAll() {
   const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes'];
   const res = await Promise.all(keys.map(k => api('/api/file/' + k)));
   keys.forEach((k, i) => { S[k] = res[i].content; S.sha[k] = res[i].sha; });
-  S.config = Object.assign({ updates: [], end_dates: [], limited_manual: [], limited_exclude: [] }, S.config || {});
+  S.config = Object.assign({ updates: [], limited_manual: [], limited_exclude: [] }, S.config || {});
+  delete S.config.end_dates;   // 終了日の機能は廃止
   S.resident = S.resident || {};
   S.history = Array.isArray(S.history) ? S.history : [];
   nameByNorm = {}; tiByNorm = {};
@@ -73,12 +102,13 @@ async function loadAll() {
   for (const id of ids) { const v = S.master[id]; nameByNorm[norm(v.name)] = v.name; tiByNorm[norm(v.name)] = v.ti; }
   const dl = $('shipNames');
   dl.replaceChildren(...Object.values(nameByNorm).sort((a, b) => a.localeCompare(b, 'ja')).map(n => el('option', { value: n })));
-  dirty.clear();
-  document.body.classList.remove('dirty');
+  ['resident', 'history'].forEach(k => setDirty(k, false));
+  lastLoad = Date.now();
+  setState(`読み込み ${clock()}`);
   renderAll();
 }
 function renderAll() {
-  renderDash(); renderUpdates(); fillMapSelects(); renderResident(); renderLimited(); renderEnds(); renderHistory();
+  renderDash(); renderUpdates(); fillMapSelects(); renderResident(); renderLimited(); renderHistory();
 }
 
 // ---------------------------------------------------------------- 保存
@@ -89,10 +119,10 @@ async function save(key, btn) {
   try {
     const r = await api('/api/file/' + key, { content: S[key], sha: S.sha[key], message: `管理画面: ${label}を更新` });
     S.sha[key] = r.sha;
-    dirty.delete(key);
-    if (!dirty.size) document.body.classList.remove('dirty');
+    setDirty(key, false);
+    setState(`保存しました ${clock()}`);
     toast(key === 'history' ? '保存しました' : '保存しました。再集計が自動で始まります（数分後に公開ページへ反映）');
-    setTimeout(loadRuns, 4000);
+    if (key !== 'history') watchRuns();
   } catch (e) {
     toast(e.message, true);
   } finally {
@@ -132,6 +162,35 @@ async function loadRuns() {
   } catch (e) { toast(e.message, true); return []; }
 }
 
+// 再集計が終わるまで状況を見張り、終わったら公開中のデータを読み直す
+let watchTimer = null;
+function watchRuns() {
+  clearInterval(watchTimer);
+  let n = 0, seenRunning = false;
+  watchTimer = setInterval(async () => {
+    const runs = await loadRuns();
+    const running = runs.some(r => r.status !== 'completed');
+    seenRunning = seenRunning || running;
+    if ((seenRunning && !running) || ++n > 60) {
+      clearInterval(watchTimer);
+      if (seenRunning) {
+        try {
+          const r = await api('/api/file/drop');
+          S.drop = r.content; renderDash(); renderLimited();
+          toast('再集計が終わりました。公開ページには 1〜2 分で反映されます');
+        } catch (e) { /* 次の「最新に更新」で読み直す */ }
+      }
+    }
+  }, 8000);
+}
+let lastLoad = 0;
+async function reloadAll(silent) {
+  if (dirty.size && !confirm('未保存の変更（常駐リスト・更新履歴）があります。破棄して最新を読み込みますか？')) return;
+  setState('読み込み中…');
+  try { await loadAll(); await loadRuns(); if (!silent) toast('最新の状態を読み込みました'); }
+  catch (e) { setState('読み込めませんでした', true); toast(e.message, true); }
+}
+
 // ---------------------------------------------------------------- アップデート日時
 function renderUpdates() {
   const now = Date.now();
@@ -143,7 +202,7 @@ function renderUpdates() {
     return el('tr', {},
       el('td', { class: 'num' }, u.at), el('td', {}, u.note || ''),
       el('td', {}, el('span', { class: 'tag ' + tag[1] }, tag[0])),
-      el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { S.config.updates.splice(S.config.updates.indexOf(u), 1); markDirty('config'); renderUpdates(); } } }, '削除')));
+      el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { S.config.updates.splice(S.config.updates.indexOf(u), 1); markDirty('config', `アップデート日時 ${u.at} を削除`); renderUpdates(); } } }, '削除')));
   }));
 }
 
@@ -155,7 +214,6 @@ function fillMapSelects() {
   $('resMap').replaceChildren(...Object.keys(S.resident).sort(mapCmp).map(m => el('option', { value: m }, m)));
   if (cur && S.resident[cur]) $('resMap').value = cur;
   $('manMap').replaceChildren(...opts());
-  $('endMap').replaceChildren(...opts('全海域'));
 }
 function renderResident() {
   const m = $('resMap').value;
@@ -273,14 +331,15 @@ const same = (a, b) => a.map === b.map && a.node === b.node && norm(a.ship) === 
 function renderLimited() {
   const q = norm($('limFilter').value);
   const ex = S.config.limited_exclude;
-  const rows = autoLimited().filter(a => !q || norm(a.map + a.node + a.ship).includes(q)).map(a => {
-    const excluded = ex.some(e => same(e, a));
+  const rows = autoLimited().filter(a => !ex.some(e => same(e, a)))
+    .filter(a => !q || norm(a.map + a.node + a.ship).includes(q)).map(a => {
+    const excluded = false;
     return el('tr', {},
       el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
       el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
       el('td', { class: 'num' }, `${a.drops} / ${a.n}`),
       el('td', {}, excluded ? el('span', { class: 'tag' }, '除外予定') : [
-        el('button', { class: 'btn small', on: { click: () => { ex.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config'); renderLimited(); } } }, '除外'), ' ',
+        el('button', { class: 'btn small', on: { click: () => { ex.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `限定から除外 ${a.map}-${a.node} ${a.ship}`); renderLimited(); } } }, '除外'), ' ',
         el('button', { class: 'btn small', on: { click: () => toResident(a) } }, '常駐へ')]));
   });
   $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 6 }, '該当なし'))]));
@@ -288,10 +347,10 @@ function renderLimited() {
   const man = S.config.limited_manual;
   $('manTable').tBodies[0].replaceChildren(...man.map(e => el('tr', {},
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), el('td', { class: 'num' }, e.added || ''),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { man.splice(man.indexOf(e), 1); markDirty('config'); renderLimited(); } } }, '削除')))));
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { man.splice(man.indexOf(e), 1); markDirty('config', `手動の限定を削除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '削除')))));
   $('exTable').tBodies[0].replaceChildren(...(ex.length ? ex.map(e => el('tr', {},
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config'); renderLimited(); } } }, '解除')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config', `除外を解除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '解除')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
 }
 function toResident(a) {
   readResidentTable();
@@ -303,16 +362,6 @@ function toResident(a) {
   $('resMap').value = a.map;
   renderResident();
   toast(`${a.map}-${a.node} の常駐リストに ${a.ship} を追加しました。「常駐リスト」タブで保存してください`);
-}
-
-// ---------------------------------------------------------------- 終了日
-function renderEnds() {
-  const now = Date.now();
-  const list = S.config.end_dates;
-  $('endTable').tBodies[0].replaceChildren(...(list.length ? list.map(e => el('tr', {},
-    el('td', {}, e.ship), el('td', {}, e.map || '全海域'), el('td', {}, e.node || '全マス'), el('td', { class: 'num' }, e.end),
-    el('td', {}, parse(e.end) > now ? el('span', { class: 'tag wait' }, '予約（未来）') : el('span', { class: 'tag ok' }, '適用中')),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { list.splice(list.indexOf(e), 1); markDirty('config'); renderEnds(); } } }, '削除')))) : [el('tr', {}, el('td', { colSpan: 6 }, 'なし'))]));
 }
 
 // ---------------------------------------------------------------- 更新履歴
@@ -336,13 +385,15 @@ document.querySelectorAll('#tabs button').forEach(b => b.addEventListener('click
 document.querySelectorAll('.btn.save').forEach(b => b.addEventListener('click', () => save(b.dataset.save, b)));
 $('rerunBtn').addEventListener('click', async e => {
   e.target.disabled = true;
-  try { await api('/api/rerun', {}); toast('再集計を開始しました'); setTimeout(loadRuns, 4000); }
+  try { await api('/api/rerun', {}); toast('再集計を開始しました'); watchRuns(); }
   catch (err) { toast(err.message, true); }
   finally { setTimeout(() => { e.target.disabled = false; }, 5000); }
 });
-$('runsReload').addEventListener('click', async () => {
-  await loadRuns();
-  try { const r = await api('/api/file/drop'); S.drop = r.content; renderDash(); renderLimited(); } catch (e) { toast(e.message, true); }
+$('runsReload').addEventListener('click', () => reloadAll());
+$('reloadBtn').addEventListener('click', () => reloadAll());
+// 別の端末で変更したあとにこの画面へ戻ってきたら、自動で最新を読み込む
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !dirty.size && Date.now() - lastLoad > 30000) reloadAll(true);
 });
 $('updAdd').addEventListener('click', () => {
   const at = fromInput($('updAt').value);
@@ -350,7 +401,7 @@ $('updAdd').addEventListener('click', () => {
   if (S.config.updates.some(u => u.at === at)) return toast('同じ日時が登録済みです', true);
   S.config.updates.push({ at, note: $('updNote').value.trim() });
   $('updAt').value = ''; $('updNote').value = '';
-  markDirty('config'); renderUpdates();
+  markDirty('config', `アップデート日時 ${at} を追加`); renderUpdates();
 });
 $('resMap').addEventListener('change', () => { readResidentTable(); renderResident(); });
 $('resAddNode').addEventListener('click', () => {
@@ -382,19 +433,12 @@ $('manAdd').addEventListener('click', () => {
   if (S.config.limited_manual.some(x => same(x, e))) return toast('登録済みです', true);
   S.config.limited_manual.push(e);
   $('manShip').value = '';
-  markDirty('config'); renderLimited();
+  markDirty('config', `手動の限定を追加 ${e.map}-${e.node} ${e.ship}`); renderLimited();
 });
 $('manClear').addEventListener('click', () => {
-  if (!S.config.limited_manual.length || !confirm(`手動で追加した ${S.config.limited_manual.length} 件をすべて削除しますか？（保存するまで確定しません）`)) return;
+  if (!S.config.limited_manual.length || !confirm(`手動で追加した ${S.config.limited_manual.length} 件をすべて削除しますか？`)) return;
   S.config.limited_manual = [];
-  markDirty('config'); renderLimited();
-});
-$('endAdd').addEventListener('click', () => {
-  const end = fromInput($('endAt').value), ship = canon($('endShip').value);
-  if (!ship || !end) return toast('艦名と終了日時を入力してください', true);
-  S.config.end_dates.push({ ship, map: $('endMap').value, node: $('endNode').value.trim(), end });
-  $('endShip').value = ''; $('endNode').value = ''; $('endAt').value = '';
-  markDirty('config'); renderEnds();
+  markDirty('config', '手動の限定をすべて削除'); renderLimited();
 });
 $('histAdd').addEventListener('click', () => {
   S.history.push({ '更新日時': fmt(new Date()).slice(0, 10), '更新内容': [] });
@@ -402,5 +446,6 @@ $('histAdd').addEventListener('click', () => {
 });
 window.addEventListener('beforeunload', e => { if (dirty.size) { e.preventDefault(); e.returnValue = ''; } });
 $('logoutForm').addEventListener('submit', () => dirty.clear());
+window.addEventListener('pagehide', () => clearInterval(watchTimer));
 
 loadAll().then(loadRuns).catch(e => toast(e.message, true));

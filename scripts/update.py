@@ -15,7 +15,10 @@ GitHub Actions から毎日実行される想定。手元で試す場合:
     state/drop_YYYY-MM.json.gz  state/build_YYYY-MM.json.gz
 """
 import argparse
+import bisect
+import calendar
 import gzip
+import hashlib
 import json
 import os
 import struct
@@ -30,7 +33,11 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JST = timezone(timedelta(hours=9))
 DT_FMT = "%Y/%m/%d %H:%M:%S"
 
-DUMP_BASE = "https://api.poi.moe/dump/"
+DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
+# 過去月のアーカイブ。ファイル名は <種別>-<翌月1日0時(UTC)のUNIX時刻を16進>.gz
+ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
+STATE_VERSION = 2
+MAX_ARCHIVE_MONTHS = 12  # さかのぼって取得する過去月の上限
 START2_URLS = [
     "https://raw.githubusercontent.com/Tibowl/api_start2/master/start2.json",
 ]
@@ -224,17 +231,35 @@ def month_of(ts):
     return time.strftime("%Y-%m", time.gmtime(ts))  # ダンプは UTC の月初でリセットされる
 
 
+def month_start(month):
+    y, m = map(int, month.split("-"))
+    return calendar.timegm((y, m, 1, 0, 0, 0))
+
+
+def next_month(month):
+    y, m = map(int, month.split("-"))
+    return f"{y + (m == 12)}-{m % 12 + 1:02d}"
+
+
+def archive_url(kind_file, month):
+    """month (UTC) の全記録が入った過去月アーカイブの URL。"""
+    return f"{ARCHIVE_BASE}{kind_file}-{month_start(next_month(month)):x}.gz"
+
+
 # ---------------------------------------------------------------- ドロップ集計
-def aggregate_drops(path, routes, ships, resident_ids):
+def aggregate_drops(path, routes, ships, resident_ids, cuts=()):
     """戻り値: {month: state}。
 
     state = {
       month, records, first, last,
       tot:  {map: {node: {"b": bossか, "S": [戦闘数, {艦ID: 数}], "O": [..A/B勝利..]}}},
-      hden: {map: {node: {時(epoch/3600): [S戦闘数, A/B戦闘数]}}},
-      hsid: {map: {node: {艦ID: {時: [S, A/B]}}}}   # 常駐リストに無い艦のみ
+      hden: {map: {node: {区間の開始時刻(epoch秒): [S戦闘数, A/B戦闘数]}}},
+      hsid: {map: {node: {艦ID: {区間の開始時刻: [S, A/B]}}}}   # 常駐リストに無い艦のみ
     }
+    区間は 1 時間ごと。さらに cuts (登録済みのアップデート日時) でも区切るので、
+    登録済みの日時については秒単位で正確に「それ以降」だけを取り出せる。
     """
+    cuts = sorted(set(cuts))
     cnt = defaultdict(int)       # (month, mapId, cell, rank, sid) -> n
     hden = defaultdict(int)      # (month, mapId, cell, hour, rank) -> n
     hsid = defaultdict(int)      # (month, mapId, cell, hour, rank, sid) -> n
@@ -266,7 +291,11 @@ def aggregate_drops(path, routes, ships, resident_ids):
         except (TypeError, ValueError):
             continue
         mo = month_of(ts)
-        hour = ts // 3600
+        hour = ts - ts % 3600
+        if cuts:
+            i = bisect.bisect_right(cuts, ts)
+            if i and cuts[i - 1] > hour:
+                hour = cuts[i - 1]
         used += 1
         cnt[(mo, map_id, cell, rc, sid)] += 1
         hden[(mo, map_id, cell, hour, rc)] += 1
@@ -288,8 +317,8 @@ def aggregate_drops(path, routes, ships, resident_ids):
 
     out = {}
     for mo, (n, first, last) in meta.items():
-        out[mo] = {"month": mo, "records": n, "first": first, "last": last,
-                   "tot": {}, "hden": {}, "hsid": {}}
+        out[mo] = {"v": STATE_VERSION, "month": mo, "records": n, "first": first, "last": last,
+                   "cuts": cuts, "final": False, "tot": {}, "hden": {}, "hsid": {}}
     unknown = set()
     for (mo, map_id, cell, rc, sid), n in cnt.items():
         m, node = place(map_id, cell)
@@ -361,19 +390,23 @@ def load_state(state_dir, kind):
             try:
                 with gzip.open(os.path.join(state_dir, fn), "rt", encoding="utf-8") as f:
                     st = json.load(f)
+                if kind == "drop" and st.get("v") != STATE_VERSION:
+                    log(f"  {fn}: 旧形式のため作り直します")
+                    continue
                 res[st["month"]] = st
             except (OSError, ValueError, KeyError) as e:
                 warn(f"状態ファイルを読めません: {fn}: {e}")
     return res
 
 
-def merge_state(state_dir, kind, old, new):
+def merge_state(state_dir, kind, old, new, force=False):
     """ダンプは当月分の全件なので、月ごとに丸ごと置き換える。
-    月初リセット直後など件数が減っている場合は、保存済みの方を残す。"""
+    月初リセット直後など件数が減っている場合は、保存済みの方を残す。
+    force=True (過去月アーカイブ由来) は常に置き換える。"""
     os.makedirs(state_dir, exist_ok=True)
     for mo, st in new.items():
         prev = old.get(mo)
-        if prev and prev.get("records", 0) > st["records"]:
+        if not force and prev and (prev.get("final") or prev.get("records", 0) > st["records"]):
             log(f"  {kind} {mo}: 保存済み {prev['records']:,} 件 > 今回 {st['records']:,} 件 のため据え置き")
             continue
         old[mo] = st
@@ -387,7 +420,6 @@ def merge_state(state_dir, kind, old, new):
 def load_config():
     cfg = load_json(os.path.join(ROOT, "admin_config.json"), {}) or {}
     cfg.setdefault("updates", [])
-    cfg.setdefault("end_dates", [])
     cfg.setdefault("limited_manual", [])
     cfg.setdefault("limited_exclude", [])
     return cfg
@@ -407,20 +439,6 @@ def effective_cutoff(cfg, now):
     return best
 
 
-def end_rules(cfg, now):
-    rules = []
-    for r in cfg["end_dates"]:
-        try:
-            t = parse_dt(r.get("end"))
-        except ValueError as e:
-            warn(str(e))
-            continue
-        if t <= now and r.get("ship"):
-            rules.append((norm_name(r["ship"]), (r.get("map") or "").strip(),
-                          (r.get("node") or "").strip(), t))
-    return rules
-
-
 # ---------------------------------------------------------------- 出力の計算
 def build_drop_data(states, resident, cfg, ships, now):
     name_of = {int(k): v["name"] for k, v in ships.items()}
@@ -431,16 +449,10 @@ def build_drop_data(states, resident, cfg, ships, now):
 
     cutoff = effective_cutoff(cfg, now)
     base_start = cutoff if cutoff is not None else 0
-    rules = end_rules(cfg, now)
     exclude = {(e.get("map"), e.get("node"), norm_name(e.get("ship", ""))) for e in cfg["limited_exclude"]}
 
     def start_for(m, node, name):
-        s = base_start
-        nn = norm_name(name)
-        for rn, rm, rnode, t in rules:
-            if rn == nn and rm in ("", m) and rnode in ("", node) and t > s:
-                s = t
-        return s
+        return base_start
 
     months = sorted(states)
     den_cache = {}
@@ -451,7 +463,7 @@ def build_drop_data(states, resident, cfg, ships, now):
             a = b = 0
             for mo in months:
                 for h, (s, o) in states[mo]["hden"].get(m, {}).get(node, {}).items():
-                    if int(h) * 3600 >= start:
+                    if int(h) >= start:
                         a += s
                         b += o
             den_cache[key] = (a, b)
@@ -523,7 +535,7 @@ def build_drop_data(states, resident, cfg, ships, now):
                 hs = st["hsid"].get(m, {}).get(node, {}).get(str(sid))
                 if hs is not None:
                     for h, (s, o) in hs.items():
-                        if int(h) * 3600 >= start:
+                        if int(h) >= start:
                             ds += s
                             do += o
                 else:
@@ -700,6 +712,8 @@ def main():
     ap.add_argument("--create-file", help="ダウンロード済みの createshiprecords.gz を使う")
     ap.add_argument("--no-download", action="store_true", help="ダンプを取得せず、保存済みの状態だけで再出力")
     ap.add_argument("--offline", action="store_true", help="マスターデータも取得しない")
+    ap.add_argument("--smart", action="store_true",
+                    help="当日すでにダンプを取得済みで、アップデート日時と常駐リストが同じなら再取得しない")
     ap.add_argument("--now", help="現在時刻を上書き (テスト用, 'YYYY/MM/DD HH:MM:SS' 日本時間)")
     args = ap.parse_args()
 
@@ -713,12 +727,28 @@ def main():
     drop_states = load_state(args.state_dir, "drop")
     build_states = load_state(args.state_dir, "build")
     failed = []
+    res_ids = resident_id_set(resident, ships, routes)
+    cuts = []
+    for u in cfg["updates"]:
+        try:
+            cuts.append(parse_dt(u.get("at")))
+        except ValueError:
+            pass
+    cutoff = effective_cutoff(cfg, now)
+    # ダンプは 24 時間に 1 回しか更新されない。除外や手動追加だけの変更なら取得し直す必要はない
+    meta_path = os.path.join(args.state_dir, "meta.json")
+    meta = load_json(meta_path, {}) or {}
+    sig = hashlib.sha1(json.dumps([sorted(cuts), resident], ensure_ascii=False, sort_keys=True).encode()).hexdigest()
+    skip_dump = (args.smart and meta.get("sig") == sig and now - meta.get("fetched_at", 0) < 20 * 3600
+                 and month_of(now) in drop_states)
+    if skip_dump:
+        log(f"当月ダンプは {fmt_dt(meta['fetched_at'])} に取得済みのため再取得しません")
     with tempfile.TemporaryDirectory() as tmp:
         jobs = [("drop", args.drop_file, "dropshiprecords.gz"),
                 ("build", args.create_file, "createshiprecords.gz")]
         for kind, given, fname in jobs:
             path = given
-            if not path and not args.no_download:
+            if not path and not args.no_download and not skip_dump:
                 path = os.path.join(tmp, fname)
                 try:
                     log(f"ダウンロード: {DUMP_BASE}{fname}")
@@ -732,8 +762,11 @@ def main():
                 continue
             try:
                 if kind == "drop":
-                    new = aggregate_drops(path, routes, ships, resident_id_set(resident, ships, routes))
+                    new = aggregate_drops(path, routes, ships, res_ids, cuts)
                     drop_states = merge_state(args.state_dir, "drop", drop_states, new)
+                    if not given:
+                        os.makedirs(args.state_dir, exist_ok=True)
+                        save_json(meta_path, {"sig": sig, "fetched_at": now})
                 else:
                     new = aggregate_builds(path)
                     build_states = merge_state(args.state_dir, "build", build_states, new)
@@ -745,6 +778,42 @@ def main():
                     os.remove(path)   # 解析が済んだダンプは残さない
                 except OSError:
                     pass
+
+        # 有効なアップデート日時が過去の月にある場合、その月から前月までのアーカイブを取り込む。
+        # (例: 10/22 のアップデートなら 10 月分。11 月分は上の当月ダンプ)
+        if cutoff is not None and not args.no_download:
+            cur = month_of(now)
+            months = []
+            mo = month_of(cutoff)
+            while mo < cur:
+                months.append(mo)
+                mo = next_month(mo)
+            if len(months) > MAX_ARCHIVE_MONTHS:
+                warn(f"アップデート日時が古いため、直近 {MAX_ARCHIVE_MONTHS} か月分だけ取り込みます")
+                months = months[-MAX_ARCHIVE_MONTHS:]
+            for mo in months:
+                st = drop_states.get(mo)
+                in_month = month_start(mo) <= cutoff < month_start(next_month(mo))
+                if st and st.get("final") and (not in_month or cutoff in st.get("cuts", [])):
+                    continue   # 取り込み済み
+                url = archive_url("dropshiprecords", mo)
+                path = os.path.join(tmp, f"archive_{mo}.gz")
+                try:
+                    log(f"過去月アーカイブ {mo}: {url}")
+                    size = http_get(url, dest=path, timeout=600)
+                    log(f"  {size / 1e6:.1f} MB")
+                    new = aggregate_drops(path, routes, ships, res_ids, cuts)
+                    if mo not in new:
+                        raise RuntimeError(f"{mo} の記録が含まれていません")
+                    new[mo]["final"] = True
+                    drop_states = merge_state(args.state_dir, "drop", drop_states, {mo: new[mo]}, force=True)
+                except Exception as e:  # noqa: BLE001
+                    warn(f"{mo} の過去月アーカイブを取り込めませんでした (月初 1〜2 日は未公開のことがあります): {e}")
+                finally:
+                    try:
+                        os.remove(path)
+                    except OSError:
+                        pass
 
     old_drop = load_json(os.path.join(ROOT, "Drop_Data.json"))
     drop = build_drop_data(drop_states, resident, cfg, ships, now)
