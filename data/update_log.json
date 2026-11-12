@@ -1,0 +1,31 @@
+[
+  {
+    "at": "2026/11/12 17:43:33",
+    "trigger": "workflow_dispatch",
+    "drop_records": 16079785,
+    "drop_added": 0,
+    "build_records": 122507,
+    "build_added": 0,
+    "data_to": "2026/11/12 01:02:19",
+    "months": [
+      "2026-09",
+      "2026-10",
+      "2026-11"
+    ],
+    "cutoff": "2026/11/11 18:00:00",
+    "limited": 224,
+    "resident": 10636,
+    "limited_added_n": 0,
+    "limited_removed_n": 0,
+    "resident_added_n": 0,
+    "resident_removed_n": 0,
+    "limited_added": [],
+    "limited_removed": [],
+    "resident_added": [],
+    "resident_removed": [],
+    "notes": [
+      "2026-09 の過去月アーカイブを取り込み (6,686,810 件)",
+      "2026-10 の過去月アーカイブを取り込み (7,033,037 件)"
+    ]
+  }
+]
