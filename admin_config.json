@@ -7,16 +7,10 @@
   ],
   "limited_manual": [
     {
-      "added": "2026/11/12 20:01:02",
+      "added": "2026/11/12 21:00:31",
       "map": "1-2",
       "node": "E",
-      "ship": "Salmon"
-    },
-    {
-      "map": "1-2",
-      "node": "E",
-      "ship": "秋津洲",
-      "added": "2026/11/12 21:00:31"
+      "ship": "秋津洲"
     }
   ],
   "limited_exclude": [],
