@@ -317,7 +317,11 @@ function renderAutoResident() {
   const q = $('autoResFilter').value;
   const all = [];
   for (const [m, nodes] of Object.entries((S.drop || {}).maps || {})) for (const [node, v] of Object.entries(nodes)) for (const r of v.ships) {
-    if (r[7] === 'data') all.push({ map: m, node, ship: r[0], rate: r[3], drops: r[4], n: r[5] });
+    if (r[7] === 'data') {
+      const ld = (((S.lastdrop || {}).maps || {})[m] || {})[node] || {};
+      const v = ld[r[0]];
+      all.push({ map: m, node, ship: r[0], rate: r[3], drops: r[4], n: r[5], last: Array.isArray(v) ? v[0] : (v || '') });
+    }
   }
   all.sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'));
   const rows = all.filter(a => !off.some(e => same(e, a))).filter(a => matchQ(norm(`${a.map}-${a.node} ${a.ship}`), q));
@@ -328,7 +332,8 @@ function renderAutoResident() {
     el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
     el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
     el('td', { class: 'num' }, `${Number(a.drops).toLocaleString()} / ${Number(a.n).toLocaleString()}`),
-    el('td', {}, el('button', { class: 'btn small', on: { click: () => { off.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設(全月)から外す ${a.map}-${a.node} ${a.ship}`); renderAutoResident(); } } }, '常設から外す')))) : [el('tr', {}, el('td', { colSpan: 6 }, '該当なし'))]));
+    el('td', { class: 'num' + (a.last && Date.now() - parse(a.last + ':00') >= 72 * 3600e3 ? ' stale' : '') }, a.last || '—'),
+    el('td', {}, el('button', { class: 'btn small', on: { click: () => { off.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設(全月)から外す ${a.map}-${a.node} ${a.ship}`); renderAutoResident(); } } }, '常設から外す')))) : [el('tr', {}, el('td', { colSpan: 7 }, '該当なし'))]));
   $('autoOffTable').tBodies[0].replaceChildren(...(off.length ? off.map(e => el('tr', {},
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
     el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { off.splice(off.indexOf(e), 1); markDirty('config', `常設(全月)に戻す ${e.map}-${e.node} ${e.ship}`); renderAutoResident(); } } }, '常設に戻す')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));

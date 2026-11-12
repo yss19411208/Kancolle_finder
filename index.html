@@ -6,27 +6,27 @@
 <title>艦これ ドロップ検索</title>
 <style>
 :root {
-  /* 海図と真鍮: 夜の海 (背景) / 海図の紙 (面) / 青緑 (見出し帯) / 真鍮 (罫) / 朱 (限定・ボス) */
-  --bg: #0e2a36;
-  --surface: #f7f2e3;
-  --paper2: #ece4cb;
-  --navy: #143c46;
-  --navy2: #1f6068;
-  --blue: #1a7885;
-  --blue-light: #dfece7;
-  --border: #d1c8a9;
-  --brass: #c9a24a;
-  --text: #1c2a2c;
-  --text-sub: #5b6966;
-  --shadow: 0 3px 14px rgba(0,0,0,.28);
-  --shadow-sm: 0 1px 5px rgba(0,0,0,.18);
-  --radius: 6px;
-  --limited: #b5371f;
-  --limited-bg: #fbece4;
-  --limited-bd: #e0a38e;
+  /* 明るい海図: 淡い海色の地 / 白い面 / 群青と青緑の帯 / 真鍮の罫 / 朱 (限定・ボス) */
+  --bg: #e4eef1;
+  --surface: #ffffff;
+  --paper2: #eef4f5;
+  --navy: #0f3a47;
+  --navy2: #1b6f7c;
+  --blue: #14707e;
+  --blue-light: #e2f0f1;
+  --border: #c9d8dc;
+  --brass: #c59b3c;
+  --text: #13262b;
+  --text-sub: #56686d;
+  --shadow: 0 2px 10px rgba(15,58,71,.12);
+  --shadow-sm: 0 1px 4px rgba(15,58,71,.10);
+  --radius: 8px;
+  --limited: #b8371c;
+  --limited-bg: #fdf0ea;
+  --limited-bd: #e6a892;
   --gold: #7d5f0e;
-  --gold-bg: #fbf3d2;
-  --gold-bd: #cfae4a;
+  --gold-bg: #fbf5dc;
+  --gold-bd: #d6b85a;
   --mincho: "Shippori Mincho", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -425,91 +425,191 @@ header {
 }
 
 /* ============================================================
-   テーマ: 海図と真鍮  (既存スタイルの上書き)
+   テーマ: 明るい海図  (既存スタイルの上書き)
    ============================================================ */
 body {
   background-color: var(--bg);
   background-image:
-    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+    linear-gradient(rgba(15,58,71,.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15,58,71,.045) 1px, transparent 1px);
   background-size: 56px 56px; background-attachment: fixed;
+  font-size: 15px;
 }
-#loading { background: #0a202a; }
+#loading { background: var(--navy); }
 .loading-title, .header-title, .card-header, .drawer-header, #modalTitle, .map-subtitle { font-family: var(--mincho); }
 .loading-bar { background: var(--brass); }
-header { background: #0a202a; border-bottom: 3px solid var(--brass); box-shadow: 0 2px 14px rgba(0,0,0,.45); }
+header { background: var(--navy); border-bottom: 3px solid var(--brass); box-shadow: 0 2px 10px rgba(15,58,71,.3); }
 .header-title { font-size: 19px; letter-spacing: .14em; }
 .header-title .anchor { color: var(--brass); margin-right: 10px; font-weight: 400; }
-.header-title span { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
-.update-btn { border-color: var(--brass); color: #f1e3b8; background: transparent; border-radius: 3px; }
-.update-btn:hover { background: rgba(201,162,74,.22); }
+.header-title .sub { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
+.update-btn { border-color: var(--brass); color: #f4e6bb; background: transparent; border-radius: 4px; font-size: 12px; padding: 6px 12px; }
+.update-btn:hover { background: rgba(197,155,60,.25); }
 .drawer-header, .kouryaku-bar { background: var(--navy); border-bottom: 2px solid var(--brass); }
 .update-date { background: var(--paper2); color: var(--navy); }
-.update-item { border-bottom-color: #e6dec3; }
+button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-visible { outline: 3px solid var(--brass); outline-offset: 2px; }
 
-.mode-tabs { border: 1px solid #06161d; background: #0a202a; padding: 4px; gap: 4px; box-shadow: none; }
-.mode-tabs label { border-right: none; border-radius: 3px; color: #a9bcb8; font-family: var(--mincho); font-size: 15px; letter-spacing: .1em; }
-.mode-tabs label:hover { background: rgba(255,255,255,.07); color: #fff; }
-.mode-tabs input:checked + label { background: var(--surface); color: var(--navy); box-shadow: inset 0 -3px 0 var(--brass); }
-.mode-tabs input:checked + label:hover { background: var(--surface); }
-.mode-tabs input:focus-visible + label { outline: 2px solid var(--brass); outline-offset: 2px; }
-
-.search-box, .card, .hint-box { border: 1px solid #06161d; box-shadow: var(--shadow); }
-.notice { border-left-color: var(--brass); }
-.form-input, .form-select, .clear-btn, .world-btn, .src-btn { background-color: #fffdf5; border-radius: 3px; }
-.form-input:focus, .form-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,120,133,.18); }
-button:focus-visible, .chip:focus-visible, .tab:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
-.world-btn.active, .src-btn.active { background: var(--navy); border-color: var(--navy); }
-.world-btn:hover { border-color: #9fc3bb; }
-
-.card-header {
-  background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
-  border-bottom: 2px solid var(--brass); font-size: 17px; letter-spacing: .1em; padding: 11px 16px;
+/* ---- 探し方の切り替え ---- */
+.mode-tabs { border: none; background: transparent; box-shadow: none; gap: 6px; padding: 0; margin-bottom: 0; overflow: visible; }
+.mode-tabs label {
+  border: 1px solid var(--border); border-bottom: none; border-radius: 8px 8px 0 0; background: #d5e3e7;
+  color: var(--text-sub); font-family: var(--mincho); font-size: 16px; letter-spacing: .1em; padding: 11px 8px;
 }
-.type-badge { border: 1px solid rgba(255,255,255,.3); background: transparent; border-radius: 2px; font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; letter-spacing: .04em; }
+.mode-tabs label:last-of-type { border-right: 1px solid var(--border); }
+.mode-tabs label:hover { background: #c8dadf; color: var(--navy); }
+.mode-tabs input:checked + label, .mode-tabs input:checked + label:hover { background: var(--surface); color: var(--navy); box-shadow: inset 0 3px 0 var(--brass); font-weight: 700; }
+.mode-tabs input:focus-visible + label { outline: 3px solid var(--brass); outline-offset: 2px; }
+.search-box { border-radius: 0 0 8px 8px; border-top: none; padding: 14px 16px 12px; box-shadow: var(--shadow); }
+.pick-label { font-size: 12px; font-weight: 700; color: var(--text-sub); margin-bottom: 8px; letter-spacing: .04em; }
+
+/* ---- 海域ボタン ---- */
+.world-filter { gap: 0; margin-bottom: 0; border-bottom: 2px solid var(--navy2); flex-wrap: nowrap; overflow-x: auto; }
+.world-btn {
+  border: none; border-radius: 6px 6px 0 0; background: transparent; color: var(--text-sub);
+  padding: 8px 13px 7px; font-size: 13px; font-weight: 600; white-space: nowrap; flex-shrink: 0;
+}
+.world-btn b { font-size: 15px; margin-right: 5px; font-variant-numeric: tabular-nums; }
+.world-btn:hover { background: var(--blue-light); color: var(--navy); border-color: transparent; }
+.world-btn.active { background: var(--navy2); color: #fff; }
+.map-buttons { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px 0 12px; }
+.map-btn {
+  position: relative; min-width: 74px; padding: 10px 14px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--paper2); color: var(--navy); font: inherit; font-size: 16px; font-weight: 700;
+  font-variant-numeric: tabular-nums; cursor: pointer; transition: background .12s, border-color .12s;
+}
+.map-btn:hover { background: var(--blue-light); border-color: var(--navy2); }
+.map-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; box-shadow: inset 0 -3px 0 var(--brass); }
+.map-btn .dot { position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--limited); }
+
+/* ---- 絞り込みの帯 ---- */
+.toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+.seg .src-btn, .seg .sort-btn {
+  border: none; border-right: 1px solid var(--border); border-radius: 0; background: #fff; color: var(--text-sub);
+  padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+}
+.seg button:last-child { border-right: none; }
+.seg button:hover { background: var(--blue-light); }
+.seg .src-btn.active, .seg .sort-btn.active { background: var(--navy2); color: #fff; }
+.seg .src-btn.lim.active { background: var(--limited); }
+.ghost-btn { margin-left: auto; border: 1px solid var(--border); background: #fff; color: var(--navy); border-radius: 6px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.ghost-btn:hover { background: var(--blue-light); }
+.notice { border-left: none; padding: 0; margin: 10px 0 0; font-size: 12px; }
+.data-note { margin: 0; }
+
+/* ---- 艦種ボタン ---- */
+.type-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.type-btn {
+  padding: 9px 16px; border-radius: 6px; border: 1px solid var(--border); background: var(--paper2);
+  color: var(--navy); font: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+}
+.type-btn:hover { background: var(--blue-light); border-color: var(--navy2); }
+.type-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; box-shadow: inset 0 -3px 0 var(--brass); }
+.form-input { font-size: 15px; padding: 10px 12px; border-radius: 6px; }
+.form-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(20,112,126,.18); }
+.clear-btn { border-radius: 6px; }
+
+/* ---- 海域カード ---- */
+#result { margin-top: 14px; }
+.card { box-shadow: var(--shadow); }
+.card-header { background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%); border-bottom: 3px solid var(--brass); font-size: 20px; letter-spacing: .1em; padding: 11px 16px; }
+.card-sub { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; font-size: 12px; font-weight: 400; opacity: .75; letter-spacing: .06em; margin-left: 4px; }
 .map-media, .map-media-sm { background: var(--paper2); }
-.map-media img, .map-media-sm img { border: 1px solid #8f8662; border-radius: 2px; }
-.kouryaku-btn { border-radius: 3px; background: var(--navy); }
-.kouryaku-btn:hover { background: var(--blue); }
+.map-media img, .map-media-sm img { border-radius: 4px; }
+.kouryaku-btn { border-radius: 6px; background: var(--navy2); }
+.kouryaku-btn:hover { background: var(--navy); }
 
 /* マスの見出し: 海図の丸印 */
-.node-header { background: var(--paper2); color: var(--navy); padding: 7px 14px; gap: 10px; letter-spacing: .04em; }
-.node-header:hover { background: #e2d8b9; }
+.node-header { background: #f4f8f9; color: var(--navy); padding: 9px 14px; gap: 10px; letter-spacing: .02em; border-top: 1px solid var(--border); border-bottom: none; }
+.node-header:hover { background: var(--blue-light); }
+.node-header.boss { background: #fbf3ef; }
+.node-header.boss:hover { background: #f8e8e1; }
 .node-mark {
-  display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 5px;
-  border-radius: 13px; background: var(--navy2); color: #fff; font-size: 13px; font-weight: 700;
-  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0,0,0,.3); letter-spacing: 0; flex-shrink: 0;
+  display: inline-grid; place-items: center; min-width: 30px; height: 30px; padding: 0 6px;
+  border-radius: 15px; background: var(--navy2); color: #fff; font-size: 15px; font-weight: 700;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(15,58,71,.35); letter-spacing: 0; flex-shrink: 0;
 }
 .node-mark.boss { background: var(--limited); }
-.node-label { font-size: 11px; color: var(--text-sub); font-weight: 400; }
-.node-count { background: rgba(20,60,70,.1); }
-.type-header { background: #f1ead4; color: var(--text-sub); border-bottom-color: #e2d9bc; border-left: 3px solid var(--brass); padding-left: 17px; }
-.drop-row { border-bottom-color: #ebe3c9; }
-.drop-row:hover { background: #efe7cd; }
-.drop-rate.none { color: #a9a68f; }
-.rate-table td { vertical-align: middle; }
-.rate-table .node-mark { margin-right: 6px; }
-.badge { border-radius: 2px; }
-.badge.boss { color: var(--limited); background: var(--limited-bg); border-color: var(--limited-bd); }
+.node-label { font-size: 13px; color: var(--text-sub); font-weight: 600; }
+.node-count { margin-left: 0; background: #e3ecef; color: var(--text-sub); font-size: 12px; }
+.node-label + .node-count { margin-left: auto; }
+.node-count.lim { background: var(--limited-bg); color: var(--limited); font-weight: 700; }
+.node-toggle { margin-left: 6px; }
+.node-body { border-top: 1px solid var(--border); padding: 4px 0 8px; }
 
-.chip-list, .stat-bar { background: #f1ead4; }
-.chip { background: #fffdf5; border-color: #b9c9b9; border-radius: 3px; color: var(--navy); font-variant-numeric: tabular-nums; gap: 1px; }
-.modal-box { border-radius: 6px; border: 1px solid #06161d; }
-.modal-header { border-bottom: 2px solid var(--brass); }
-.rate-table td:first-child { padding-left: 16px; }
+/* 艦のタイル: 艦種ごとに横へ並べる */
+.type-row { display: grid; grid-template-columns: 92px 1fr; gap: 0 10px; padding: 8px 14px 4px; border-bottom: 1px dashed #dde7ea; }
+.type-row:last-child { border-bottom: none; }
+.type-header { background: transparent; border: none; padding: 7px 0 0; font-size: 13px; color: var(--navy); letter-spacing: .02em; }
+.type-header small { display: block; font-size: 11px; font-weight: 400; color: var(--text-sub); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 6px; }
+.tile {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px; text-align: left;
+  padding: 7px 10px; border: 1px solid #dbe5e8; border-left: 4px solid #9fbcc3; border-radius: 4px;
+  background: #fff; font: inherit; cursor: pointer; min-width: 0;
+}
+.tile:hover { background: var(--blue-light); border-color: var(--navy2); border-left-color: var(--navy2); }
+.tile .ship-name { min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile .drop-rate { margin-left: 0; font-size: 14px; color: var(--blue); }
+.tile.lim { border-left-color: var(--limited); background: var(--limited-bg); border-color: var(--limited-bd); }
+.tile.lim .ship-name, .tile.lim .drop-rate { color: var(--limited); }
+.tile.lim:hover { background: #fbe2d8; }
+.drop-rate.none { color: #9aa9ad; }
+
+/* ---- 艦名から探す: 一覧 ---- */
+.result-header { color: var(--text-sub); padding: 0 2px 8px; }
+.ship-list { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); overflow: hidden; }
+.ship-row { display: grid; grid-template-columns: 190px 1fr; gap: 12px; align-items: center; padding: 9px 14px; border-bottom: 1px solid #e3ecef; cursor: pointer; }
+.ship-row:last-child { border-bottom: none; }
+.ship-row:hover { background: var(--blue-light); }
+.ship-row-name { display: flex; flex-direction: column; min-width: 0; }
+.ship-row-name .ship-name { font-size: 16px; }
+.ship-type { font-size: 11px; color: var(--text-sub); }
+.ship-row .chip-list { padding: 0; border: none; background: transparent; }
+.none-note { font-size: 12px; color: var(--text-sub); }
+.hint-box { box-shadow: var(--shadow); }
+
+/* ---- チップ・表・詳細 ---- */
+.chip-list, .stat-bar { background: var(--paper2); }
+.chip { background: #fff; border-color: #bfd3d8; border-radius: 4px; color: var(--navy); font-variant-numeric: tabular-nums; gap: 1px; }
 .chip .chip-nodes { background: transparent; padding: 0; font-size: 12px; color: var(--text-sub); }
 .chip:hover .chip-nodes { background: transparent; }
 .chip.lim { background: var(--limited-bg); }
-.map-subtitle { background: var(--paper2); color: var(--navy); font-size: 15px; letter-spacing: .08em; }
-.result-header { color: #a9bcb8; }
+.ship-row .chip { cursor: inherit; }
+.ship-row .chip:hover { background: #fff; color: var(--navy); border-color: #bfd3d8; }
+.ship-row .chip.lim:hover { background: var(--limited-bg); color: var(--limited); border-color: var(--limited-bd); }
+.ship-row .chip:hover .chip-nodes { color: var(--text-sub); }
+.badge { border-radius: 3px; }
+.badge.boss { color: var(--limited); background: var(--limited-bg); border-color: var(--limited-bd); }
+.modal-box { border-radius: 8px; }
+.modal-header { border-bottom: 3px solid var(--brass); }
+.type-badge { border: 1px solid rgba(255,255,255,.35); background: transparent; border-radius: 3px; font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
+.map-subtitle { background: var(--paper2); color: var(--navy); font-size: 16px; letter-spacing: .08em; }
+.rate-table { font-size: 14px; }
+.rate-table td { vertical-align: middle; }
+.rate-table td:first-child { padding-left: 16px; }
+.rate-table .node-mark { margin-right: 6px; }
 .tabs { background: var(--paper2); }
-.tab.active { background: var(--surface); border-bottom-color: var(--brass); }
-.tab:hover:not(.active) { background: #e2d8b9; }
+.tab { font-size: 14px; padding: 10px 20px; }
+.tab.active { background: var(--surface); border-bottom: 3px solid var(--brass); }
 
-.sources { color: #a9bcb8; border-top: 1px solid rgba(201,162,74,.45); }
-.sources h3 { color: var(--brass); font-family: var(--mincho); font-size: 13px; letter-spacing: .1em; }
-.sources a { color: #9fd3d6; }
-@media (max-width: 640px) { .header-title { font-size: 15px; letter-spacing: .08em; } }
+.sources { color: var(--text-sub); border-top: 1px solid var(--border); }
+.sources h3 { color: var(--navy); font-family: var(--mincho); font-size: 14px; letter-spacing: .1em; }
+.sources a { color: var(--blue); }
+
+@media (max-width: 640px) {
+  .header-title { font-size: 16px; letter-spacing: .08em; }
+  .header-title .sub { display: none; }
+  .container { padding: 10px 8px 60px; }
+  .mode-tabs label { font-size: 15px; padding: 10px 4px; }
+  .map-btn { min-width: 62px; padding: 9px 10px; }
+  .type-row { grid-template-columns: 1fr; padding: 8px 10px 6px; }
+  .type-header { padding: 0 0 5px; }
+  .type-header small { display: inline; margin-left: 6px; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ship-row { grid-template-columns: 1fr; gap: 6px; }
+  .ship-row-name { flex-direction: row; align-items: baseline; gap: 8px; }
+  .ghost-btn { margin-left: 0; }
+}
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 </style>
 </head>
@@ -524,7 +624,7 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible { outline: 2px sol
 <header>
   <div class="header-title">
     <b class="anchor" aria-hidden="true">⚓</b>艦これ ドロップ検索
-    <span>KanColle Drop Finder</span>
+    <span class="sub">KanColle Drop Finder</span>
   </div>
   <div class="header-stats" id="headerStats"></div>
   <button class="update-btn" onclick="openDrawer()">更新履歴</button>
@@ -550,39 +650,43 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible { outline: 2px sol
 
   <!-- ===== 海域モード ===== -->
   <div id="mapArea" class="search-box">
-    <div class="notice">海域を選択するとノードごとのドロップが表示されます。橙色は限定ドロップです。艦名をクリックすると詳細が開きます。<span id="dataNote"></span></div>
-    <div class="world-filter" id="worldFilter"></div>
-    <div class="form-row" style="margin-bottom:10px">
-      <select class="form-select" id="mapSelect"></select>
+    <div class="pick-label">海域を選ぶ</div>
+    <div class="world-filter" id="worldFilter" role="tablist"></div>
+    <div class="map-buttons" id="mapButtons"></div>
+    <select id="mapSelect" hidden></select>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="表示する艦">
+        <button class="src-btn active" data-src="all"     onclick="setMapSrc(this,'all')">すべて</button>
+        <button class="src-btn"        data-src="normal"  onclick="setMapSrc(this,'normal')">通常のみ</button>
+        <button class="src-btn lim"    data-src="limited" onclick="setMapSrc(this,'limited')">限定のみ</button>
+      </div>
+      <div class="seg" role="group" aria-label="並び順">
+        <button class="sort-btn active" onclick="setMapSort(this,'rate')">率が高い順</button>
+        <button class="sort-btn"        onclick="setMapSort(this,'name')">艦名順</button>
+      </div>
+      <button class="ghost-btn" id="toggleAllBtn" onclick="toggleAllNodes()">すべてのマスを開く</button>
     </div>
-    <div class="src-filter">
-      <button class="src-btn active" data-src="all"     onclick="setMapSrc(this,'all')">全て表示</button>
-      <button class="src-btn"        data-src="normal"  onclick="setMapSrc(this,'normal')">通常のみ</button>
-      <button class="src-btn lim"    data-src="limited" onclick="setMapSrc(this,'limited')">限定のみ</button>
-    </div>
+    <div class="notice" id="mapNotice">艦名を押すと、その艦が出る海域と建造レシピが開きます。<span id="dataNote"></span></div>
   </div>
 
   <!-- ===== 艦名モード ===== -->
   <div id="shipArea" class="search-box" style="display:none">
-    <div class="notice">テキスト入力かプルダウンで艦名を指定できます。艦種・限定フィルターと組み合わせ可能です。</div>
+    <div class="pick-label">艦種を選ぶ、または艦名を入力</div>
+    <div class="type-buttons" id="typeButtons"></div>
+    <select id="typeFilter" hidden><option value="all">全艦種</option></select>
+    <select id="shipDropdown" hidden><option value=""></option></select>
     <div class="form-row">
       <input type="text" class="form-input" id="nameInput"
-             placeholder="艦名を入力して絞り込む（例: 時雨 / Fletcher）"
+             placeholder="艦名の一部を入力（例: 時雨 / Fletcher）"
              autocomplete="off" oninput="onNameInput()">
       <button class="clear-btn" id="clearBtn" style="display:none" onclick="clearSearch()">クリア</button>
     </div>
-    <div class="form-row">
-      <select class="form-select" id="shipDropdown" onchange="onDropdownChange()" style="flex:2">
-        <option value="">-- プルダウンから選択 --</option>
-      </select>
-      <select class="form-select" id="typeFilter" onchange="onFilterChange()" style="min-width:120px">
-        <option value="all">全艦種</option>
-      </select>
-    </div>
-    <div class="src-filter">
-      <button class="src-btn active" onclick="setShipSrc(this,'all')">全て</button>
-      <button class="src-btn"        onclick="setShipSrc(this,'normal')">通常のみ</button>
-      <button class="src-btn lim"    onclick="setShipSrc(this,'limited')">限定のみ</button>
+    <div class="toolbar">
+      <div class="seg" role="group" aria-label="表示する艦">
+        <button class="src-btn active" onclick="setShipSrc(this,'all')">すべて</button>
+        <button class="src-btn"        onclick="setShipSrc(this,'normal')">通常あり</button>
+        <button class="src-btn lim"    onclick="setShipSrc(this,'limited')">限定あり</button>
+      </div>
     </div>
   </div>
 
@@ -711,45 +815,79 @@ function mediaHtml(map, size) {
 // ============================================================
 //  初期UI構築
 // ============================================================
+const WORLD_NAMES = { 1: '鎮守府', 2: '南西諸島', 3: '北方', 4: '西方', 5: '南方', 6: '中部', 7: '南西' };
+let mapSort = 'rate';
+
 function buildWorldFilter() {
   const worlds = [...new Set(Object.keys(mapData).map(m => m.split('-')[0]))].sort((a,b)=>+a-+b);
+  if (currentWorld === 'all' || !worlds.includes(currentWorld)) currentWorld = worlds[0];
   const wf = $('worldFilter');
   wf.innerHTML = '';
-  [['all','全海域'], ...worlds.map(w=>[w, w+'-X'])].forEach(([val,label], i) => {
+  worlds.forEach(w => {
     const b = document.createElement('button');
-    b.className = 'world-btn' + (i===0 ? ' active' : '');
-    b.textContent = label;
+    b.className = 'world-btn' + (w === currentWorld ? ' active' : '');
+    b.innerHTML = `<b>${w}</b>${WORLD_NAMES[w] || ''}`;
     b.onclick = () => {
-      currentWorld = val;
+      currentWorld = w;
       document.querySelectorAll('.world-btn').forEach(x => x.classList.remove('active'));
       b.classList.add('active');
-      buildMapSelect();
+      buildMapSelect(true);
     };
     wf.appendChild(b);
   });
 }
 
-function buildMapSelect() {
-  const ms   = $('mapSelect');
-  const prev = ms.value;
-  ms.innerHTML = '';
-  Object.keys(mapData)
-    .filter(m => currentWorld === 'all' || m.split('-')[0] === currentWorld)
-    .sort(mapCmp)
-    .forEach(m => {
+// 海域ボタン。選んだ海域は隠し select (mapSelect) にも入れておく
+function buildMapSelect(pickFirst) {
+  const ms = $('mapSelect');
+  if (!ms.options.length) {
+    Object.keys(mapData).sort(mapCmp).forEach(m => {
       const o = document.createElement('option');
       o.value = m; o.textContent = m; ms.appendChild(o);
     });
-  if (prev && ms.querySelector(`option[value="${prev}"]`)) ms.value = prev;
+  }
+  const maps = Object.keys(mapData).filter(m => m.split('-')[0] === currentWorld).sort(mapCmp);
+  if (pickFirst || !maps.includes(ms.value)) ms.value = maps[0];
+  const box = $('mapButtons');
+  box.innerHTML = '';
+  maps.forEach(m => {
+    const hasLim = Object.values(mapData[m]).some(list => list.some(e => e.limited === true));
+    const b = document.createElement('button');
+    b.className = 'map-btn' + (m === ms.value ? ' active' : '');
+    b.innerHTML = m + (hasLim ? '<i class="dot" title="限定ドロップあり"></i>' : '');
+    b.onclick = () => {
+      ms.value = m;
+      box.querySelectorAll('.map-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      showMap();
+    };
+    box.appendChild(b);
+  });
   showMap();
 }
 
 function buildTypeFilter() {
   const tf = $('typeFilter');
   tf.innerHTML = '<option value="all">全艦種</option>';
+  const box = $('typeButtons');
+  box.innerHTML = '';
+  const add = (val, label) => {
+    const b = document.createElement('button');
+    b.className = 'type-btn' + (val === 'all' ? ' active' : '');
+    b.textContent = label;
+    b.onclick = () => {
+      tf.value = val;
+      box.querySelectorAll('.type-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      onFilterChange();
+    };
+    box.appendChild(b);
+  };
+  add('all', '全艦種');
   TYPE_LABELS.forEach((t, i) => {
     const o = document.createElement('option');
     o.value = i; o.textContent = t; tf.appendChild(o);
+    add(String(i), t);
   });
 }
 
@@ -797,6 +935,24 @@ function toggleNode(id) {
   if (!body) return;
   const open = body.classList.toggle('open');
   if (tog) tog.textContent = open ? '▼' : '▶';
+  syncToggleAll();
+}
+
+function syncToggleAll() {
+  const bodies = [...document.querySelectorAll('#result .node-body')];
+  const allOpen = bodies.length > 0 && bodies.every(b => b.classList.contains('open'));
+  $('toggleAllBtn').textContent = allOpen ? 'すべてのマスを閉じる' : 'すべてのマスを開く';
+  $('toggleAllBtn').dataset.open = allOpen ? '1' : '';
+}
+
+function toggleAllNodes() {
+  const open = !$('toggleAllBtn').dataset.open;
+  document.querySelectorAll('#result .node-body').forEach(b => {
+    b.classList.toggle('open', open);
+    const tog = document.getElementById('tog_' + b.id);
+    if (tog) tog.textContent = open ? '▼' : '▶';
+  });
+  syncToggleAll();
 }
 
 function setMapSrc(btn, src) {
@@ -806,50 +962,69 @@ function setMapSrc(btn, src) {
   showMap();
 }
 
+function setMapSort(btn, sort) {
+  mapSort = sort;
+  document.querySelectorAll('#mapArea .sort-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  showMap();
+}
+
 function showMap() {
   const map = $('mapSelect').value;
   if (!map || !mapData[map]) { $('result').innerHTML = ''; return; }
+  // 開いているマスは、絞り込みや並び替えをしても開いたままにする
+  const wasOpen = new Set([...document.querySelectorAll('#result .node-body.open')].map(b => b.id));
+  const sameMap = $('result').dataset.map === map;
 
-  let html = `<div class="card"><div class="card-header" style="cursor:default">${map}</div>`;
+  const world = map.split('-')[0];
+  let html = `<div class="card"><div class="card-header" style="cursor:default">${map}<span class="card-sub">${WORLD_NAMES[world] || ''}海域</span></div>`;
   html += mediaHtml(map, 'lg');
+  const cmp = mapSort === 'rate'
+    ? (a, b) => (b.rate ?? -1) - (a.rate ?? -1) || a.ship.localeCompare(b.ship, 'ja')
+    : (a, b) => a.ship.localeCompare(b.ship, 'ja');
+  let shown = 0;
 
   for (const node of Object.keys(mapData[map]).sort(nodeCmp)) {
     const all = mapData[map][node];
-
-    // 厳密フィルター：「限定のみ」のとき limited===true のものだけ
-    // 「通常のみ」のとき normal===true かつ limited===true でないもの
     const entries = all.filter(e => {
       if (currentMapSrc === 'normal')  return e.normal  === true && e.limited !== true;
       if (currentMapSrc === 'limited') return e.limited === true;
       return true;
     });
     if (!entries.length) continue;
+    shown++;
 
     const byType = {};
-    for (const e of entries) {
-      if (!byType[e.ti]) byType[e.ti] = [];
-      byType[e.ti].push(e);
-    }
-    const limCnt  = entries.filter(e => e.limited === true).length;
-    let cntStr = `${entries.length}艦`;
-    if (limCnt > 0) cntStr += ` (限定${limCnt})`;
+    for (const e of entries) (byType[e.ti] = byType[e.ti] || []).push(e);
+    const limCnt = entries.filter(e => e.limited === true).length;
+    const boss   = nodeMeta[map]?.[node]?.boss;
     const nodeId = `node_${map.replace('-','_')}_${node}`;
+    // 初期状態: ボスマスと、「限定のみ」表示のときは開いておく
+    const open   = sameMap ? wasOpen.has(nodeId) : (boss || currentMapSrc === 'limited');
 
-    html += `<div class="node-header" onclick="toggleNode('${nodeId}')">${nodeMark(map, node)}<span class="node-label">${nodeMeta[map]?.[node]?.boss ? 'ボスマス' : 'マス'}</span><span class="node-count">${cntStr}</span><span class="node-toggle" id="tog_${nodeId}">▶</span></div>`;
-    html += `<div class="node-body" id="${nodeId}">`;
+    html += `<div class="node-header${boss ? ' boss' : ''}" onclick="toggleNode('${nodeId}')">${nodeMark(map, node)}`
+      + `<span class="node-label">${boss ? 'ボスマス' : 'マス'}</span>`
+      + `<span class="node-count">${entries.length}艦</span>`
+      + (limCnt ? `<span class="node-count lim">限定 ${limCnt}</span>` : '')
+      + `<span class="node-toggle" id="tog_${nodeId}">${open ? '▼' : '▶'}</span></div>`;
+    html += `<div class="node-body${open ? ' open' : ''}" id="${nodeId}">`;
     for (let ti = 0; ti < TYPE_LABELS.length; ti++) {
       if (!byType[ti]?.length) continue;
-      html += `<div class="type-header">${TYPE_LABELS[ti]}</div>`;
-      for (const e of byType[ti].sort((a,b) => a.ship.localeCompare(b.ship,'ja'))) {
-        const limBadge = e.limited === true ? '<span class="badge limited">限定</span>' : '';
+      html += `<div class="type-row"><div class="type-header">${TYPE_LABELS[ti]}<small>${byType[ti].length}</small></div><div class="tiles">`;
+      for (const e of byType[ti].sort(cmp)) {
         const rt = rateText(e);
-        html += `<div class="drop-row" onclick="openModal('${esc(e.ship)}')" title="${rateTitle(e)}">${limBadge}<span class="ship-name">${e.ship}</span><span class="drop-rate${rt ? '' : ' none'}">${rt || '—'}</span></div>`;
+        html += `<button class="tile${e.limited === true ? ' lim' : ''}" onclick="openModal('${esc(e.ship)}')" title="${rateTitle(e)}">`
+          + `<span class="ship-name">${e.ship}</span><span class="drop-rate${rt ? '' : ' none'}">${rt || '—'}</span></button>`;
       }
+      html += `</div></div>`;
     }
     html += `</div>`;
   }
+  if (!shown) html += `<div class="no-data">${currentMapSrc === 'limited' ? 'この海域に限定ドロップはありません' : '該当するドロップはありません'}</div>`;
   html += '</div>';
   $('result').innerHTML = html;
+  $('result').dataset.map = map;
+  syncToggleAll();
 }
 
 // ============================================================
@@ -914,7 +1089,7 @@ function showShipResults() {
   const src   = currentShipSrc;
 
   if (!q && tiVal === 'all' && src === 'all') {
-    $('result').innerHTML = '<div class="hint-box">艦名を入力するか、プルダウンから選択するか、絞り込み条件を指定してください。</div>';
+    $('result').innerHTML = '<div class="hint-box">上のボタンで艦種を選ぶか、艦名を入力してください。</div>';
     return;
   }
 
@@ -924,9 +1099,10 @@ function showShipResults() {
     return;
   }
 
-  const MAX = 80;
-  let html = `<div class="result-header">${ships.length}件ヒット${ships.length>MAX?` (先頭${MAX}件を表示)`:''}</div>`;
+  const MAX = 120;
+  let html = `<div class="result-header">${ships.length}隻${ships.length>MAX?`（先頭${MAX}隻を表示）`:''}　行を押すと詳細が開きます</div><div class="ship-list">`;
   ships.slice(0, MAX).forEach(s => { html += buildShipCard(s); });
+  html += '</div>';
   if (ships.length > MAX)
     html += `<div class="no-data">他 ${ships.length-MAX} 件。検索条件を追加してさらに絞り込んでください。</div>`;
   $('result').innerHTML = html;
@@ -935,28 +1111,23 @@ function showShipResults() {
 function buildShipCard(ship) {
   const d        = shipData[ship];
   const typeName = TYPE_LABELS[d.ti] ?? 'その他';
-  const hasLim   = d.drops.some(x => x.limited === true);
 
   // カード内のドロップ表示はsrcフィルターに従う
   const drops = srcFilter(d.drops, currentShipSrc);
   const maps  = [...new Set(drops.map(x => x.map))].sort(mapCmp);
 
-  let html = `<div class="card">
-    <div class="card-header" onclick="openModal('${esc(ship)}')">
-      ${ship}
-      <span class="type-badge">${typeName}</span>
-      ${hasLim ? '<span class="badge limited" style="margin-left:0">限定あり</span>' : ''}
-    </div>
+  let html = `<div class="ship-row" onclick="openModal('${esc(ship)}')">
+    <div class="ship-row-name"><span class="ship-name">${ship}</span><span class="ship-type">${typeName}</span></div>
     <div class="chip-list">`;
 
   if (!maps.length) {
-    html += '<span style="font-size:12px;color:var(--text-sub)">該当海域なし</span>';
+    html += `<span class="none-note">${BUILD[ship] ? '建造のみ（ドロップなし）' : '該当海域なし'}</span>`;
   } else {
     for (const map of maps) {
       const md    = drops.filter(x => x.map === map);
       const nodes = nodeRates(md);
       const isLim = md.some(x => x.limited === true);
-      html += `<span class="chip${isLim?' lim':''}" onclick="openModal('${esc(ship)}')">${map}:<span class="chip-nodes">${nodes}</span></span>`;
+      html += `<span class="chip${isLim?' lim':''}">${map}:<span class="chip-nodes">${nodes}</span></span>`;
     }
   }
   html += '</div></div>';
@@ -1202,10 +1373,7 @@ Promise.all([
     map_all:  '％は poi 統計による、その海域全体の勝利(S/A/B)のうち、そのマスでその艦が出た割合です',
   }[DROP_INFO.rate_mode] || '％は poi 統計によるドロップ率です';
   renderSources();
-  $('dataNote').innerHTML = `<div class="data-note">${modeNote}（「—」は報告なし）。`
-    + (DROP_INFO.records ? `集計 ${Number(DROP_INFO.records).toLocaleString()} 件 / ` : '')
-    + `更新 ${DROP_INFO.generated || '不明'}`
-    + (DROP_INFO.cutoff ? ` / 限定は ${DROP_INFO.cutoff} 以降のデータ` : '') + `</div>`;
+  $('dataNote').innerHTML = `<span class="data-note">${modeNote}（「—」は報告なし）。</span>`;
 
   buildWorldFilter();
   buildMapSelect();
@@ -1226,13 +1394,13 @@ Promise.all([
 });
 </script>
 <div class="sources" id="sources"></div>
-<div style="text-align:center;padding:18px 12px 8px;font-size:11px;color:#8fa5a1;margin-top:8px">
+<div style="text-align:center;padding:18px 12px 8px;font-size:11px;color:#56686d;margin-top:8px">
   データ出典 / Credits:
-  <a href="https://zekamashi.net/" target="_blank" rel="noopener" style="color:#9fd3d6;text-decoration:none">ぜかましネット</a>
+  <a href="https://zekamashi.net/" target="_blank" rel="noopener" style="color:#14707e;text-decoration:none">ぜかましネット</a>
   &nbsp;/&nbsp;
-  <a href="https://wikiwiki.jp/kancolle/" target="_blank" rel="noopener" style="color:#9fd3d6;text-decoration:none">艦これ Wiki</a>
+  <a href="https://wikiwiki.jp/kancolle/" target="_blank" rel="noopener" style="color:#14707e;text-decoration:none">艦これ Wiki</a>
   &nbsp;/&nbsp;
-  <a href="https://github.com/poooi/poi-server/wiki" target="_blank" rel="noopener" style="color:#9fd3d6;text-decoration:none">poi-server</a>
+  <a href="https://github.com/poooi/poi-server/wiki" target="_blank" rel="noopener" style="color:#14707e;text-decoration:none">poi-server</a>
 </div>
 
 </body>
