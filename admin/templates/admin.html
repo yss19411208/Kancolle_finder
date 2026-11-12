@@ -86,6 +86,14 @@
     <div class="actions"><button class="btn primary save" data-save="resident">保存して再集計</button><span class="unsaved">未保存の変更があります。保存するまで反映されません。</span></div>
   </div>
   <div class="card">
+    <h2>出撃ドロップに無いが、常設として公開しているもの</h2>
+    <p class="note">出撃ドロップ（Wiki）には載っていませんが、保存している<strong>すべての月</strong>で 1 回以上ドロップしているため、公開ページでは常設として載せています。<span id="autoMonths"></span>出撃ドロップの青字や、限定ページで継続中の艦は対象外です。限定に戻したいものは「常設から外す」を押してください（その場で保存）。</p>
+    <div class="row"><input type="text" id="autoResFilter" placeholder="絞り込み（海域・艦名）" class="grow"><span id="autoResCount" class="note"></span></div>
+    <div class="scroll tall"><table class="list" id="autoResTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>ドロップ数 / 戦闘数</th><th></th></tr></thead><tbody></tbody></table></div>
+    <h2 style="margin-top:16px">常設から外したもの</h2>
+    <table class="list" id="autoOffTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+  <div class="card">
     <h2>Wiki との差分を確認</h2>
     <p class="note">艦これ Wiki「出撃ドロップ」ページをブラウザで保存した HTML を選ぶと、青字（期間限定）以外を常駐として読み取り、現在の常駐リストとの差分を表示します。反映は上の表で手入力してください。ファイルはこのブラウザ内で解析され、サーバーには送信されません。</p>
     <input type="file" id="wikiFile" accept=".html,.htm,text/html">
@@ -99,6 +107,13 @@
     <p class="note">poi で観測され、常駐リストに無い艦です（公開中のデータ時点）。誤りなら「除外」、常駐なら「常駐へ」を押してください。「除外」はその場で保存され、数分後に公開ページへ反映されます。</p>
     <div class="row"><input type="text" id="limFilter" placeholder="絞り込み（海域・艦名）" class="grow"></div>
     <div class="scroll tall"><table class="list" id="autoTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>報告</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>1隻報告（掲載していないもの）</h2>
+    <p class="note">アップデート日時以降の報告が 1 件だけで、そのマスの戦闘が 10,000 回以上あるものです。誤報告の可能性が高いので公開ページには載せていません。本物なら「復元」を押すと掲載されます（その場で保存）。報告が 2 件以上になれば自動で掲載されます。</p>
+    <table class="list" id="singleTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>戦闘数</th><th></th></tr></thead><tbody></tbody></table>
+    <h2 style="margin-top:16px">復元したもの</h2>
+    <table class="list" id="keepTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th></th></tr></thead><tbody></tbody></table>
   </div>
   <div class="card">
     <h2>手動で追加した限定ドロップ</h2>
@@ -121,24 +136,36 @@
 <section id="tab-lastdrop">
   <div class="card">
     <h2>最終ドロップ</h2>
-    <p class="note">各海域・各マスで、その艦が最後にドロップした日時です（日本時間、S/A/B 勝利の記録）。限定ドロップがいつ止まったかの確認に使えます。<span id="ldRange"></span></p>
+    <p class="note">poi の記録に出てくる「海域・マス・艦」の全組み合わせについて、最後にドロップした日時とドロップ数を出します（日本時間、S/A/B 勝利）。<span id="ldRange"></span></p>
+    <ul class="legend">
+      <li><span class="tag">常設</span>出撃ドロップ（Wiki）に載っている。公開ページに掲載。</li>
+      <li><span class="tag ok">常設（全月）</span>出撃ドロップには無いが、全ての月で出ているので常設として掲載。</li>
+      <li><span class="tag wait">限定</span>常設ではなく、最新のアップデート日時以降に出ている。公開ページに掲載。</li>
+      <li><span class="tag ng">どちらでもない</span>常設でも限定でもなく、限定ページでも継続中になっていない。公開ページには載せていない（過去の限定など）。</li>
+      <li><span class="tag ng">継続中だが未確認</span>限定ページでは継続中だが、最新のアップデート以降は出ていない。公開ページには載せていない。</li>
+      <li><span class="tag">1隻報告</span>報告 1 件だけのため載せていない（「限定ドロップ」タブで復元できます）。</li>
+    </ul>
     <div class="row">
-      <input type="text" id="ldFilter" placeholder="艦名・海域で絞り込み（例: 酒匂 / 1-4 / 2-5-O）" class="grow">
+      <input type="text" id="ldFilter" placeholder="艦名・海域で絞り込み（例: 大井 / 1-3 / 1-3-J）" class="grow">
       <select id="ldKind">
+        <option value="none">どちらでもない</option>
+        <option value="page">継続中だが未確認</option>
+        <option value="single">1隻報告</option>
+        <option value="limited">限定</option>
+        <option value="normal">常設</option>
+        <option value="auto">常設（全月）</option>
         <option value="all">すべて</option>
-        <option value="limited">限定として掲載中</option>
-        <option value="normal">常駐</option>
-        <option value="none">掲載なし（過去の限定など）</option>
       </select>
       <select id="ldSort">
-        <option value="old">最終ドロップが古い順</option>
         <option value="new">最終ドロップが新しい順</option>
+        <option value="old">最終ドロップが古い順</option>
+        <option value="count">ドロップ数が多い順</option>
         <option value="place">海域・マス順</option>
         <option value="ship">艦名順</option>
       </select>
     </div>
     <div id="ldCount" class="note"></div>
-    <div class="scroll tall big"><table class="list" id="ldTable"><thead><tr><th>艦名</th><th>海域</th><th>マス</th><th>区分</th><th>最終ドロップ</th><th>経過</th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll tall big"><table class="list" id="ldTable"><thead><tr><th>艦名</th><th>海域</th><th>マス</th><th>区分</th><th>最終ドロップ</th><th>経過</th><th>ドロップ数</th></tr></thead><tbody></tbody></table></div>
   </div>
 </section>
 

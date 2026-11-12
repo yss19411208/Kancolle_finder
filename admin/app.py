@@ -49,7 +49,7 @@ SITE_URL = os.environ.get("SITE_URL", f"https://{REPO.split('/')[0]}.github.io/{
 # 編集できるファイル / 読むだけのファイル
 WRITABLE = {"config": "admin_config.json", "resident": "Normal_Drop_Ship.json", "history": "Update.json"}
 READABLE = dict(WRITABLE, drop="Drop_Data.json", master="data/ship_master.json", routes="data/map_routes.json",
-                log="data/update_log.json", lastdrop="data/last_drop.json")
+                log="data/update_log.json", lastdrop="data/last_drop.json", limpage="data/limited_page.json")
 MAX_BODY = 3 * 1024 * 1024
 
 app = Flask(__name__)
@@ -214,7 +214,11 @@ def validate(key, c):
         for u in c["updates"]:
             if not (isinstance(u, dict) and is_str(u.get("at"), 19) and len(u["at"]) == 19):
                 return "アップデート日時は YYYY/MM/DD HH:MM:SS で入力してください"
-        for e in c["limited_manual"] + c["limited_exclude"]:
+        if not isinstance(c.get("limited_keep", []), list):
+            return "limited_keep が不正です"
+        if not isinstance(c.get("auto_resident_exclude", []), list):
+            return "auto_resident_exclude が不正です"
+        for e in c["limited_manual"] + c["limited_exclude"] + c.get("limited_keep", []) + c.get("auto_resident_exclude", []):
             if not (isinstance(e, dict) and all(is_str(e.get(k)) and e[k] for k in ("map", "node", "ship"))):
                 return "限定ドロップの 海域 / マス / 艦名 を確認してください"
     elif key == "resident":

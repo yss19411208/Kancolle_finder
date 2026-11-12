@@ -64,7 +64,9 @@ BUILD_TOP_RECIPES = 60   # 1 艦あたりに出力するレシピ数の上限
 BUILD_TOP_SECRETARY = 12
 HISTORY_DETAIL_MAX = 20
 LOG_KEEP = 40             # 管理画面に出す「データ更新の記録」の保持件数
-LOG_DETAIL_MAX = 15  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
+LOG_DETAIL_MAX = 15
+AUTO_RESIDENT_MIN_DAYS = 7    # 当月は記録が 7 日分たまるまで「全月で出ているか」の判定に含めない
+SINGLE_MIN_BATTLES = 10000   # 報告 1 件だけで、そのマスの戦闘数がこれ以上なら誤報告とみなして掲載しない  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
 
 
 def log(*a):
@@ -445,6 +447,8 @@ def load_config():
     cfg.setdefault("updates", [])
     cfg.setdefault("limited_manual", [])
     cfg.setdefault("limited_exclude", [])
+    cfg.setdefault("limited_keep", [])     # 1 件報告でも掲載する (管理画面の「復元」)
+    cfg.setdefault("auto_resident_exclude", [])   # 「全月で出ているので常設扱い」から外す
     if cfg.get("rate_mode") not in RATE_MODES:
         cfg["rate_mode"] = "node_s"
     return cfg
@@ -475,6 +479,26 @@ def build_drop_data(states, resident, cfg, ships, now):
     cutoff = effective_cutoff(cfg, now)
     base_start = cutoff if cutoff is not None else 0
     exclude = {(e.get("map"), e.get("node"), norm_name(e.get("ship", ""))) for e in cfg["limited_exclude"]}
+    keep = {(e.get("map"), e.get("node"), norm_name(e.get("ship", ""))) for e in cfg["limited_keep"]}
+    single = []   # 1 件報告のため掲載しなかったもの
+    # 出撃ドロップに載っていなくても、保存している全ての月で 1 回以上出ている艦は常設として公開する。
+    # ただし限定と分かっているもの (出撃ドロップの青字 / 限定ページで継続中) と、管理画面で外したものは除く。
+    page = load_json(os.path.join(ROOT, "data", "limited_page.json"), {}) or {}
+    known_blue = {(m, node, norm_name(n)) for m, nodes in page.get("blue", {}).items()
+                  for node, names in nodes.items() for n in names}
+    known_ongoing = {(m, norm_name(n)) for m, names in page.get("ongoing", {}).items() for n in names}
+    auto_off = {(e.get("map"), e.get("node"), norm_name(e.get("ship", ""))) for e in cfg["auto_resident_exclude"]}
+    judge_months = [mo for mo in sorted(states)
+                    if mo != month_of(now) or states[mo]["last"] - states[mo]["first"] >= AUTO_RESIDENT_MIN_DAYS * 86400]
+
+    def in_every_month(m, node, sid):
+        if len(judge_months) < 2:
+            return False
+        for mo in judge_months:
+            t = states[mo]["tot"].get(m, {}).get(node)
+            if not t or not (t["S"][1].get(str(sid), 0) + t["O"][1].get(str(sid), 0)):
+                return False
+        return True
 
     def start_for(m, node, name):
         return base_start
@@ -590,6 +614,12 @@ def build_drop_data(states, resident, cfg, ships, now):
             nn = norm_name(nm)
             if nn in seen or (m, node, nn) in exclude:
                 continue
+            if ((m, node, nn) not in known_blue and (m, nn) not in known_ongoing
+                    and (m, node, nn) not in auto_off and in_every_month(m, node, sid)):
+                r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m)
+                rows.append([nm, ti_of.get(sid, 7), 0, r, d, n, basis, "data"])
+                seen.add(nn)
+                continue
             start = start_for(m, node, nm)
             ds = do = 0
             for mo in months:
@@ -609,6 +639,10 @@ def build_drop_data(states, resident, cfg, ships, now):
             if not (ds + do):
                 continue
             ns, no = den_since(m, node, start)
+            if ds + do == 1 and ns + no >= SINGLE_MIN_BATTLES and (m, node, nn) not in keep:
+                single.append([m, node, nm, ns + no])
+                seen.add(nn)
+                continue
             r, d, n, basis = rate(ds, do, ns, no, m, start)
             rows.append([nm, ti_of.get(sid, 7), 1, r, d, n, basis, "auto"])
             seen.add(nn)
@@ -645,6 +679,8 @@ def build_drop_data(states, resident, cfg, ships, now):
         "limited_months": [mo for mo in months if cutoff is not None and mo >= month_of(cutoff)] or res_months,
         "rate_mode": mode,
         "sources": SOURCES,
+        "single_hidden": single,
+        "judge_months": judge_months,
         "types": TYPE_LABELS,
         "columns": ["name", "type", "limited", "rate", "drops", "battles", "basis", "source"],
         "maps": maps,
@@ -724,9 +760,10 @@ def build_build_data(states, ships, now):
 
 
 def build_last_drop(states, ships, now):
-    """各海域・各マスで、各艦が最後にドロップした日時 (管理画面用)。"""
+    """各海域・各マスで、各艦が最後にドロップした日時と、保存している全期間のドロップ数 (管理画面用)。
+    maps[海域][マス][艦名] = [最終ドロップ日時, ドロップ数]"""
     name_of = {int(k): v["name"] for k, v in ships.items()}
-    best = {}
+    best, count = {}, defaultdict(int)
     for mo in states:
         for m, nodes in states[mo].get("lastdrop", {}).items():
             for node, d in nodes.items():
@@ -736,9 +773,14 @@ def build_last_drop(states, ships, now):
                     k = (m, node, name_of.get(int(sid), f"ID:{sid}"))
                     if ts > best.get(k, 0):
                         best[k] = ts
+        for m, nodes in states[mo]["tot"].items():
+            for node, t in nodes.items():
+                for rc in ("S", "O"):
+                    for sid, n in t[rc][1].items():
+                        count[(m, node, name_of.get(int(sid), f"ID:{sid}"))] += n
     maps = {}
     for (m, node, name), ts in sorted(best.items(), key=lambda kv: (map_key(kv[0][0]), kv[0][1], kv[0][2])):
-        maps.setdefault(m, {}).setdefault(node, {})[name] = fmt_dt(ts)[:16]
+        maps.setdefault(m, {}).setdefault(node, {})[name] = [fmt_dt(ts)[:16], count.get((m, node, name), 0)]
     return {"months": sorted(states), "maps": maps}
 
 
