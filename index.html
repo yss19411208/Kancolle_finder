@@ -505,6 +505,8 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 .type-btn:hover { background: var(--blue-light); border-color: var(--navy2); }
 .type-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; box-shadow: inset 0 -3px 0 var(--brass); }
 .form-input { font-size: 15px; padding: 10px 12px; border-radius: 6px; }
+.ship-select { font-size: 16px; font-weight: 700; color: var(--navy); padding: 11px 34px 11px 12px; border-radius: 6px; max-width: 420px; }
+.ship-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(20,112,126,.18); }
 .form-input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(20,112,126,.18); }
 .clear-btn { border-radius: 6px; }
 
@@ -671,16 +673,15 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 
   <!-- ===== 艦名モード ===== -->
   <div id="shipArea" class="search-box" style="display:none">
-    <div class="pick-label">艦種を選ぶ、または艦名を入力</div>
+    <div class="pick-label">艦種を選んで、プルダウンから艦名を選ぶ</div>
     <div class="type-buttons" id="typeButtons"></div>
     <select id="typeFilter" hidden><option value="all">全艦種</option></select>
-    <select id="shipDropdown" hidden><option value=""></option></select>
     <div class="form-row">
-      <input type="text" class="form-input" id="nameInput"
-             placeholder="艦名の一部を入力（例: 時雨 / Fletcher）"
-             autocomplete="off" oninput="onNameInput()">
-      <button class="clear-btn" id="clearBtn" style="display:none" onclick="clearSearch()">クリア</button>
+      <select class="form-select ship-select" id="shipDropdown" onchange="onDropdownChange()" aria-label="艦名">
+        <option value="">-- 艦名を選ぶ --</option>
+      </select>
     </div>
+    <input type="hidden" id="nameInput"><button id="clearBtn" hidden></button>
     <div class="toolbar">
       <div class="seg" role="group" aria-label="表示する艦">
         <button class="src-btn active" onclick="setShipSrc(this,'all')">すべて</button>
@@ -891,17 +892,28 @@ function buildTypeFilter() {
   });
 }
 
+let selectedShip = '';
+
+// 艦名のプルダウン。艦種ボタンと「通常あり/限定あり」で絞った艦を、艦種ごとにまとめて並べる
 function rebuildDropdown() {
   const dd    = $('shipDropdown');
-  const prev  = dd.value;
-  const ships = filteredShips();
-  dd.innerHTML = '<option value="">-- プルダウンから選択 --</option>';
-  ships.forEach(s => {
-    const o = document.createElement('option');
-    o.value = s; o.textContent = s;
-    if (s === prev) o.selected = true;
-    dd.appendChild(o);
-  });
+  const ships = filteredShips(true);
+  if (selectedShip && !ships.includes(selectedShip)) selectedShip = '';
+  dd.innerHTML = `<option value="">-- 艦名を選ぶ（${ships.length}隻） --</option>`;
+  const groups = {};
+  ships.forEach(n => (groups[shipData[n].ti] = groups[shipData[n].ti] || []).push(n));
+  for (let ti = 0; ti < TYPE_LABELS.length; ti++) {
+    if (!groups[ti]) continue;
+    const og = document.createElement('optgroup');
+    og.label = TYPE_LABELS[ti];
+    groups[ti].forEach(n => {
+      const o = document.createElement('option');
+      o.value = n; o.textContent = n;
+      og.appendChild(o);
+    });
+    dd.appendChild(og);
+  }
+  dd.value = selectedShip;
 }
 
 function updateStats() {
@@ -1030,15 +1042,14 @@ function showMap() {
 // ============================================================
 //  艦名モード
 // ============================================================
-function filteredShips() {
-  const q    = $('nameInput').value.trim();
+function filteredShips(ignoreSelected) {
+  if (selectedShip && !ignoreSelected) return shipData[selectedShip] ? [selectedShip] : [];
   const tiVal= $('typeFilter').value;
   const ti   = tiVal === 'all' ? -1 : +tiVal;
   const src  = currentShipSrc;
 
   return Object.entries(shipData)
     .filter(([name, d]) => {
-      if (q  && !name.includes(q)) return false;
       if (ti >= 0 && d.ti !== ti)  return false;
       if (src === 'normal')  return d.drops.some(x => x.normal  === true);
       if (src === 'limited') return d.drops.some(x => x.limited === true);
@@ -1048,18 +1059,11 @@ function filteredShips() {
     .sort((a,b) => a.localeCompare(b,'ja'));
 }
 
-function onNameInput() {
-  $('clearBtn').style.display = $('nameInput').value ? '' : 'none';
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => { rebuildDropdown(); showShipResults(); }, 160);
-}
-
+// プルダウンで艦を選ぶと、その艦だけを表示して詳細を開く。「-- 艦名を選ぶ --」に戻すと一覧に戻る
 function onDropdownChange() {
-  const val = $('shipDropdown').value;
-  if (!val) return;
-  $('nameInput').value = val;
-  $('clearBtn').style.display = '';
+  selectedShip = $('shipDropdown').value;
   showShipResults();
+  if (selectedShip) openModal(selectedShip);
 }
 
 function onFilterChange() {
@@ -1076,20 +1080,17 @@ function setShipSrc(btn, src) {
 }
 
 function clearSearch() {
-  $('nameInput').value = '';
-  $('shipDropdown').value = '';
-  $('clearBtn').style.display = 'none';
+  selectedShip = '';
   rebuildDropdown();
   showShipResults();
 }
 
 function showShipResults() {
-  const q     = $('nameInput').value.trim();
   const tiVal = $('typeFilter').value;
   const src   = currentShipSrc;
 
-  if (!q && tiVal === 'all' && src === 'all') {
-    $('result').innerHTML = '<div class="hint-box">上のボタンで艦種を選ぶか、艦名を入力してください。</div>';
+  if (!selectedShip && tiVal === 'all' && src === 'all') {
+    $('result').innerHTML = '<div class="hint-box">上のボタンで艦種を選ぶか、プルダウンから艦名を選んでください。</div>';
     return;
   }
 
