@@ -500,6 +500,14 @@ def build_drop_data(states, resident, cfg, ships, now):
     known_blue = {(m, node, norm_name(n)) for m, nodes in page.get("blue", {}).items()
                   for node, names in nodes.items() for n in names}
     known_ongoing = {(m, norm_name(n)) for m, names in page.get("ongoing", {}).items() for n in names}
+    # 限定ページの各イベントで、取消線が付いていない (= 継続中の) 艦も限定として扱う
+    for mp, nd, n, _ei, ended in page.get("entries", []):
+        if ended:
+            continue
+        if nd is None:
+            known_ongoing.add((mp, norm_name(n)))
+        else:
+            known_blue.add((mp, nd, norm_name(n)))
     auto_off = {(e.get("map"), e.get("node"), norm_name(e.get("ship", ""))) for e in cfg["auto_resident_exclude"]}
     judge_months = [mo for mo in sorted(states)
                     if mo != month_of(now) or states[mo]["last"] - states[mo]["first"] >= AUTO_RESIDENT_MIN_DAYS * 86400]

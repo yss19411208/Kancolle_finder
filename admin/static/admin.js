@@ -194,7 +194,7 @@ function buildLdRows() {
   for (const [m, nodes] of Object.entries((S.lastdrop || {}).maps || {})) for (const [node, ships] of Object.entries(nodes)) for (const [ship, v] of Object.entries(ships)) {
     const [at, count] = Array.isArray(v) ? v : [v, null];
     let k = kind[`${m}|${node}|${ship}`];
-    if (!k) k = (ongoing[m] || []).includes(ship) ? 'page' : 'none';
+    if (!k) k = ((ongoing[m] || []).includes(ship) || limitedEvents(m, node, ship).some(e => !e.ended)) ? 'page' : 'none';
     rows.push({ map: m, node, ship, at, count, t: parse(at + ':00'), kind: k, key: norm(`${m}-${node} ${ship}`) });
   }
   return rows;
@@ -320,11 +320,15 @@ function renderAutoResident() {
     if (r[7] === 'data') {
       const ld = (((S.lastdrop || {}).maps || {})[m] || {})[node] || {};
       const v = ld[r[0]];
-      all.push({ map: m, node, ship: r[0], rate: r[3], drops: r[4], n: r[5], last: Array.isArray(v) ? v[0] : (v || '') });
+      all.push({ map: m, node, ship: r[0], rate: r[3], drops: r[4], n: r[5], last: Array.isArray(v) ? v[0] : (v || ''),
+                 ev: limitedEvents(m, node, r[0]) });
     }
   }
   all.sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'));
-  const rows = all.filter(a => !off.some(e => same(e, a))).filter(a => matchQ(norm(`${a.map}-${a.node} ${a.ship}`), q));
+  const onlyHit = $('autoResOnlyHit').checked;
+  const rows = all.filter(a => !off.some(e => same(e, a))).filter(a => matchQ(norm(`${a.map}-${a.node} ${a.ship}`), q))
+    .filter(a => !onlyHit || a.ev.length);
+  $('autoResHit').textContent = `限定ページに記載があるもの: ${all.filter(a => !off.some(e => same(e, a)) && a.ev.length).length} 件`;
   const jm = (S.drop || {}).judge_months || [];
   $('autoMonths').textContent = jm.length ? `判定に使っている月: ${jm.join('、')}。` : '';
   $('autoResCount').textContent = `${rows.length} 件`;
@@ -333,7 +337,8 @@ function renderAutoResident() {
     el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
     el('td', { class: 'num' }, `${Number(a.drops).toLocaleString()} / ${Number(a.n).toLocaleString()}`),
     el('td', { class: 'num' + (a.last && Date.now() - parse(a.last + ':00') >= 72 * 3600e3 ? ' stale' : '') }, a.last || '—'),
-    el('td', {}, el('button', { class: 'btn small', on: { click: () => { off.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設(全月)から外す ${a.map}-${a.node} ${a.ship}`); renderAutoResident(); } } }, '常設から外す')))) : [el('tr', {}, el('td', { colSpan: 7 }, '該当なし'))]));
+    evCell(a.ev, '記載なし'),
+    el('td', {}, el('button', { class: 'btn small', on: { click: () => { off.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設(全月)から外す ${a.map}-${a.node} ${a.ship}`); renderAutoResident(); } } }, '常設から外す')))) : [el('tr', {}, el('td', { colSpan: 8 }, '該当なし'))]));
   $('autoOffTable').tBodies[0].replaceChildren(...(off.length ? off.map(e => el('tr', {},
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
     el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { off.splice(off.indexOf(e), 1); markDirty('config', `常設(全月)に戻す ${e.map}-${e.node} ${e.ship}`); renderAutoResident(); } } }, '常設に戻す')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
@@ -437,6 +442,28 @@ function autoLimited() {
   }
   return out.sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'));
 }
+// 期間限定ドロップのページ (data/limited_page.json) と照合する
+// 戻り値: [{title, start, status, ended}]  継続中のものを先に、新しい順
+function limitedEvents(map, node, ship) {
+  const page = S.limpage || {};
+  const ev = page.events || [];
+  const nn = norm(ship);
+  const hits = (page.entries || [])
+    .filter(([m, n, s]) => m === map && (n === null || n === node) && norm(s) === nn)
+    .map(([, , , ei, ended]) => ({ ...(ev[ei] || {}), ended: !!ended }));
+  const seen = new Set();
+  return hits.filter(h => { const k = h.title + h.start + h.ended; if (seen.has(k)) return false; seen.add(k); return true; })
+    .sort((a, b) => (a.ended - b.ended) || (b.start || '').localeCompare(a.start || ''));
+}
+const evLabel = e => `${e.title} ${e.start}〜${e.ended ? '（この艦は終了）' : ''}`;
+function evCell(list, emptyText) {
+  if (!list.length) return el('td', { class: 'ev none' }, emptyText);
+  const [first, ...rest] = list;
+  return el('td', { class: 'ev' + (first.ended ? ' past' : '') },
+    el('div', {}, evLabel(first)),
+    rest.length ? el('div', { class: 'ev-more' }, `ほか ${rest.length} 件: ` + rest.map(evLabel).join(' / ')) : null);
+}
+
 const same = (a, b) => a.map === b.map && a.node === b.node && norm(a.ship) === norm(b.ship);
 function renderLimited() {
   const q = $('limFilter').value;
@@ -448,11 +475,12 @@ function renderLimited() {
       el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
       el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
       el('td', { class: 'num' }, `${a.drops} / ${a.n}`),
+      evCell(limitedEvents(a.map, a.node, a.ship), '限定ページに記載なし'),
       el('td', {}, excluded ? el('span', { class: 'tag' }, '除外予定') : [
         el('button', { class: 'btn small', on: { click: () => { ex.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `限定から除外 ${a.map}-${a.node} ${a.ship}`); renderLimited(); } } }, '除外'), ' ',
         el('button', { class: 'btn small', on: { click: () => toResident(a) } }, '常駐へ')]));
   });
-  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 6 }, '該当なし'))]));
+  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 7 }, '該当なし'))]));
 
   // 1 隻報告で載せていないもの / 復元したもの
   const keepList = S.config.limited_keep;
@@ -552,6 +580,7 @@ $('wikiFile').addEventListener('change', async e => {
 });
 $('limFilter').addEventListener('input', renderLimited);
 $('autoResFilter').addEventListener('input', renderAutoResident);
+$('autoResOnlyHit').addEventListener('change', renderAutoResident);
 ['ldFilter', 'ldKind', 'ldSort'].forEach(id => $(id).addEventListener(id === 'ldFilter' ? 'input' : 'change', drawLastDrop));
 $('manAdd').addEventListener('click', () => {
   const e = { map: $('manMap').value, node: $('manNode').value.trim(), ship: canon($('manShip').value), added: fmt(new Date()) };

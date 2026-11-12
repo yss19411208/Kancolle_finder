@@ -118,3 +118,10 @@ td.stale{color:var(--ng);font-weight:700}
 .legend .tag{margin-right:8px;min-width:8.5em;text-align:center}
 table.list th,table.list td{font-size:14px}
 .note{font-size:13px}
+td.ev{font-size:12.5px;max-width:340px;line-height:1.5}
+td.ev.past{color:var(--sub)}
+td.ev:not(.none):not(.past){color:var(--lim);font-weight:600}
+td.ev.none{color:#9aa9ad}
+td.ev .ev-more{font-size:11px;color:var(--sub);font-weight:400}
+label.check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);white-space:nowrap}
+.warnline{color:var(--lim);font-weight:700;margin:0 0 8px}
