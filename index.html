@@ -6,24 +6,28 @@
 <title>艦これ ドロップ検索</title>
 <style>
 :root {
-  --bg: #eef2f8;
-  --surface: #ffffff;
-  --navy: #1a2e54;
-  --navy2: #26437a;
-  --blue: #2e6dbb;
-  --blue-light: #e4edf9;
-  --border: #ccd5e8;
-  --text: #18243c;
-  --text-sub: #566480;
-  --shadow: 0 2px 10px rgba(0,0,0,.10);
-  --shadow-sm: 0 1px 4px rgba(0,0,0,.07);
-  --radius: 10px;
-  --limited: #b04800;
-  --limited-bg: #fff4ec;
-  --limited-bd: #e8a070;
-  --gold: #8a6000;
-  --gold-bg: #fffbe8;
-  --gold-bd: #d4b840;
+  /* 海図と真鍮: 夜の海 (背景) / 海図の紙 (面) / 青緑 (見出し帯) / 真鍮 (罫) / 朱 (限定・ボス) */
+  --bg: #0e2a36;
+  --surface: #f7f2e3;
+  --paper2: #ece4cb;
+  --navy: #143c46;
+  --navy2: #1f6068;
+  --blue: #1a7885;
+  --blue-light: #dfece7;
+  --border: #d1c8a9;
+  --brass: #c9a24a;
+  --text: #1c2a2c;
+  --text-sub: #5b6966;
+  --shadow: 0 3px 14px rgba(0,0,0,.28);
+  --shadow-sm: 0 1px 5px rgba(0,0,0,.18);
+  --radius: 6px;
+  --limited: #b5371f;
+  --limited-bg: #fbece4;
+  --limited-bd: #e0a38e;
+  --gold: #7d5f0e;
+  --gold-bg: #fbf3d2;
+  --gold-bd: #cfae4a;
+  --mincho: "Shippori Mincho", "Yu Mincho", "YuMincho", "Hiragino Mincho ProN", "Noto Serif JP", serif;
 }
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -419,6 +423,94 @@ header {
   .map-media img, .map-media-sm img { width: 100%; }
   #updateDrawer { width: 100%; right: -100%; }
 }
+
+/* ============================================================
+   テーマ: 海図と真鍮  (既存スタイルの上書き)
+   ============================================================ */
+body {
+  background-color: var(--bg);
+  background-image:
+    linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px);
+  background-size: 56px 56px; background-attachment: fixed;
+}
+#loading { background: #0a202a; }
+.loading-title, .header-title, .card-header, .drawer-header, #modalTitle, .map-subtitle { font-family: var(--mincho); }
+.loading-bar { background: var(--brass); }
+header { background: #0a202a; border-bottom: 3px solid var(--brass); box-shadow: 0 2px 14px rgba(0,0,0,.45); }
+.header-title { font-size: 19px; letter-spacing: .14em; }
+.header-title .anchor { color: var(--brass); margin-right: 10px; font-weight: 400; }
+.header-title span { font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; }
+.update-btn { border-color: var(--brass); color: #f1e3b8; background: transparent; border-radius: 3px; }
+.update-btn:hover { background: rgba(201,162,74,.22); }
+.drawer-header, .kouryaku-bar { background: var(--navy); border-bottom: 2px solid var(--brass); }
+.update-date { background: var(--paper2); color: var(--navy); }
+.update-item { border-bottom-color: #e6dec3; }
+
+.mode-tabs { border: 1px solid #06161d; background: #0a202a; padding: 4px; gap: 4px; box-shadow: none; }
+.mode-tabs label { border-right: none; border-radius: 3px; color: #a9bcb8; font-family: var(--mincho); font-size: 15px; letter-spacing: .1em; }
+.mode-tabs label:hover { background: rgba(255,255,255,.07); color: #fff; }
+.mode-tabs input:checked + label { background: var(--surface); color: var(--navy); box-shadow: inset 0 -3px 0 var(--brass); }
+.mode-tabs input:checked + label:hover { background: var(--surface); }
+.mode-tabs input:focus-visible + label { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+.search-box, .card, .hint-box { border: 1px solid #06161d; box-shadow: var(--shadow); }
+.notice { border-left-color: var(--brass); }
+.form-input, .form-select, .clear-btn, .world-btn, .src-btn { background-color: #fffdf5; border-radius: 3px; }
+.form-input:focus, .form-select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(26,120,133,.18); }
+button:focus-visible, .chip:focus-visible, .tab:focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.world-btn.active, .src-btn.active { background: var(--navy); border-color: var(--navy); }
+.world-btn:hover { border-color: #9fc3bb; }
+
+.card-header {
+  background: linear-gradient(90deg, var(--navy) 0%, var(--navy2) 100%);
+  border-bottom: 2px solid var(--brass); font-size: 17px; letter-spacing: .1em; padding: 11px 16px;
+}
+.type-badge { border: 1px solid rgba(255,255,255,.3); background: transparent; border-radius: 2px; font-family: "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif; letter-spacing: .04em; }
+.map-media, .map-media-sm { background: var(--paper2); }
+.map-media img, .map-media-sm img { border: 1px solid #8f8662; border-radius: 2px; }
+.kouryaku-btn { border-radius: 3px; background: var(--navy); }
+.kouryaku-btn:hover { background: var(--blue); }
+
+/* マスの見出し: 海図の丸印 */
+.node-header { background: var(--paper2); color: var(--navy); padding: 7px 14px; gap: 10px; letter-spacing: .04em; }
+.node-header:hover { background: #e2d8b9; }
+.node-mark {
+  display: inline-grid; place-items: center; min-width: 26px; height: 26px; padding: 0 5px;
+  border-radius: 13px; background: var(--navy2); color: #fff; font-size: 13px; font-weight: 700;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px rgba(0,0,0,.3); letter-spacing: 0; flex-shrink: 0;
+}
+.node-mark.boss { background: var(--limited); }
+.node-label { font-size: 11px; color: var(--text-sub); font-weight: 400; }
+.node-count { background: rgba(20,60,70,.1); }
+.type-header { background: #f1ead4; color: var(--text-sub); border-bottom-color: #e2d9bc; border-left: 3px solid var(--brass); padding-left: 17px; }
+.drop-row { border-bottom-color: #ebe3c9; }
+.drop-row:hover { background: #efe7cd; }
+.drop-rate.none { color: #a9a68f; }
+.rate-table td { vertical-align: middle; }
+.rate-table .node-mark { margin-right: 6px; }
+.badge { border-radius: 2px; }
+.badge.boss { color: var(--limited); background: var(--limited-bg); border-color: var(--limited-bd); }
+
+.chip-list, .stat-bar { background: #f1ead4; }
+.chip { background: #fffdf5; border-color: #b9c9b9; border-radius: 3px; color: var(--navy); font-variant-numeric: tabular-nums; gap: 1px; }
+.modal-box { border-radius: 6px; border: 1px solid #06161d; }
+.modal-header { border-bottom: 2px solid var(--brass); }
+.rate-table td:first-child { padding-left: 16px; }
+.chip .chip-nodes { background: transparent; padding: 0; font-size: 12px; color: var(--text-sub); }
+.chip:hover .chip-nodes { background: transparent; }
+.chip.lim { background: var(--limited-bg); }
+.map-subtitle { background: var(--paper2); color: var(--navy); font-size: 15px; letter-spacing: .08em; }
+.result-header { color: #a9bcb8; }
+.tabs { background: var(--paper2); }
+.tab.active { background: var(--surface); border-bottom-color: var(--brass); }
+.tab:hover:not(.active) { background: #e2d8b9; }
+
+.sources { color: #a9bcb8; border-top: 1px solid rgba(201,162,74,.45); }
+.sources h3 { color: var(--brass); font-family: var(--mincho); font-size: 13px; letter-spacing: .1em; }
+.sources a { color: #9fd3d6; }
+@media (max-width: 640px) { .header-title { font-size: 15px; letter-spacing: .08em; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 </style>
 </head>
 <body>
@@ -431,7 +523,7 @@ header {
 
 <header>
   <div class="header-title">
-    艦これ ドロップ検索
+    <b class="anchor" aria-hidden="true">⚓</b>艦これ ドロップ検索
     <span>KanColle Drop Finder</span>
   </div>
   <div class="header-stats" id="headerStats"></div>
@@ -587,10 +679,13 @@ function rateTitle(e) {
   return `${base} ${Number(e.n).toLocaleString()}回中 ${Number(e.drops).toLocaleString()}回`;
 }
 function nodeCmp(a, b) { return a.localeCompare(b, 'en', { numeric: true }); }
-// 「A:10%・C:20%」形式
+// 「A,B,C」形式 (率は下の表に出す)
 function nodeRates(list) {
-  return list.slice().sort((x, y) => nodeCmp(x.node, y.node))
-    .map(x => x.node + (rateText(x) ? ':' + rateText(x) : '')).join('・');
+  return [...new Set(list.map(x => x.node))].sort(nodeCmp).join(',');
+}
+// マスの丸印 (ボスは朱色)
+function nodeMark(map, node) {
+  return `<span class="node-mark${nodeMeta[map]?.[node]?.boss ? ' boss' : ''}">${node}</span>`;
 }
 
 // ============================================================
@@ -740,7 +835,7 @@ function showMap() {
     if (limCnt > 0) cntStr += ` (限定${limCnt})`;
     const nodeId = `node_${map.replace('-','_')}_${node}`;
 
-    html += `<div class="node-header" onclick="toggleNode('${nodeId}')">ノード ${node}${nodeMeta[map]?.[node]?.boss ? '<span class="badge boss">ボス</span>' : ''}<span class="node-count">${cntStr}</span><span class="node-toggle" id="tog_${nodeId}">▶</span></div>`;
+    html += `<div class="node-header" onclick="toggleNode('${nodeId}')">${nodeMark(map, node)}<span class="node-label">${nodeMeta[map]?.[node]?.boss ? 'ボスマス' : 'マス'}</span><span class="node-count">${cntStr}</span><span class="node-toggle" id="tog_${nodeId}">▶</span></div>`;
     html += `<div class="node-body" id="${nodeId}">`;
     for (let ti = 0; ti < TYPE_LABELS.length; ti++) {
       if (!byType[ti]?.length) continue;
@@ -861,7 +956,7 @@ function buildShipCard(ship) {
       const md    = drops.filter(x => x.map === map);
       const nodes = nodeRates(md);
       const isLim = md.some(x => x.limited === true);
-      html += `<span class="chip${isLim?' lim':''}" onclick="openModal('${esc(ship)}')">${map}<span class="chip-nodes">${nodes}</span></span>`;
+      html += `<span class="chip${isLim?' lim':''}" onclick="openModal('${esc(ship)}')">${map}:<span class="chip-nodes">${nodes}</span></span>`;
     }
   }
   html += '</div></div>';
@@ -902,7 +997,7 @@ function renderDrop(ship) {
     const md    = drops.filter(x => x.map === map);
     const isLim = md.some(x => x.limited === true);
     const sid   = `md_${map.replace('-','_')}`;
-    html += `<span class="chip${isLim?' lim':''}" onclick="scrollInModal('${sid}')">${map}<span class="chip-nodes">${nodeRates(md)}</span></span>`;
+    html += `<span class="chip${isLim?' lim':''}" onclick="scrollInModal('${sid}')">${map}:<span class="chip-nodes">${nodeRates(md)}</span></span>`;
   }
   html += '</div>';
   html += `<div class="stat-bar">
@@ -921,7 +1016,7 @@ function renderDrop(ship) {
     for (const x of md) {
       const boss = nodeMeta[map]?.[x.node]?.boss ? '<span class="badge boss">ボス</span>' : '';
       const lim  = x.limited ? '<span class="badge limited">限定</span>' : '';
-      html += `<tr><td>ノード ${x.node}${boss}${lim}</td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
+      html += `<tr><td>${nodeMark(map, x.node)}${boss}${lim}</td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
     }
     html += '</table>';
     html += mediaHtml(map, 'sm');
@@ -1131,13 +1226,13 @@ Promise.all([
 });
 </script>
 <div class="sources" id="sources"></div>
-<div style="text-align:center;padding:18px 12px 8px;font-size:11px;color:#8898b0;border-top:1px solid var(--border);margin-top:8px">
+<div style="text-align:center;padding:18px 12px 8px;font-size:11px;color:#8fa5a1;margin-top:8px">
   データ出典 / Credits:
-  <a href="https://zekamashi.net/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">ぜかましネット</a>
+  <a href="https://zekamashi.net/" target="_blank" rel="noopener" style="color:#9fd3d6;text-decoration:none">ぜかましネット</a>
   &nbsp;/&nbsp;
-  <a href="https://wikiwiki.jp/kancolle/" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">艦これ Wiki</a>
+  <a href="https://wikiwiki.jp/kancolle/" target="_blank" rel="noopener" style="color:#9fd3d6;text-decoration:none">艦これ Wiki</a>
   &nbsp;/&nbsp;
-  <a href="https://github.com/poooi/poi-server/wiki" target="_blank" rel="noopener" style="color:#7090c0;text-decoration:none">poi-server</a>
+  <a href="https://github.com/poooi/poi-server/wiki" target="_blank" rel="noopener" style="color:#9fd3d6;text-decoration:none">poi-server</a>
 </div>
 
 </body>

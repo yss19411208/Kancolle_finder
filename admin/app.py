@@ -48,7 +48,8 @@ SITE_URL = os.environ.get("SITE_URL", f"https://{REPO.split('/')[0]}.github.io/{
 
 # 編集できるファイル / 読むだけのファイル
 WRITABLE = {"config": "admin_config.json", "resident": "Normal_Drop_Ship.json", "history": "Update.json"}
-READABLE = dict(WRITABLE, drop="Drop_Data.json", master="data/ship_master.json", routes="data/map_routes.json")
+READABLE = dict(WRITABLE, drop="Drop_Data.json", master="data/ship_master.json", routes="data/map_routes.json",
+                log="data/update_log.json", lastdrop="data/last_drop.json")
 MAX_BODY = 3 * 1024 * 1024
 
 app = Flask(__name__)

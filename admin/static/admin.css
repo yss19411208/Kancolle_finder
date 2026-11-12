@@ -1,4 +1,4 @@
-:root{--bg:#eef2f8;--surface:#fff;--navy:#1a2e54;--navy2:#26437a;--blue:#2e6dbb;--border:#ccd5e8;--text:#18243c;--sub:#566480;--lim:#b04800;--ok:#1b7a3d;--ng:#b3261e}
+:root{--bg:#0e2a36;--surface:#f7f2e3;--paper2:#ece4cb;--navy:#143c46;--navy2:#1f6068;--blue:#1a7885;--border:#d1c8a9;--brass:#c9a24a;--text:#1c2a2c;--sub:#5b6966;--lim:#a8521a;--ok:#1f6b3a;--ng:#b5371f;--mincho:"Shippori Mincho","Yu Mincho","YuMincho","Hiragino Mincho ProN","Noto Serif JP",serif}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.6}
 header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;height:52px;padding:0 16px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:20}
@@ -65,3 +65,52 @@ table.grid td.c4 textarea{min-width:250px}
 .unsaved{display:none;color:var(--lim);font-size:12px;font-weight:700}
 body.dirty-resident #tab-resident .unsaved,body.dirty-history #tab-history .unsaved{display:inline}
 body.dirty-resident #tab-resident .btn.save,body.dirty-history #tab-history .btn.save{box-shadow:0 0 0 3px #ffd27a}
+
+/* ---- テーマ: 海図と真鍮 (公開ページと共通) ---- */
+body{background-color:var(--bg);background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px);background-size:56px 56px;background-attachment:fixed}
+header{background:#0a202a;border-bottom:3px solid var(--brass);gap:12px}
+header .title{font-family:var(--mincho);font-size:18px;letter-spacing:.12em}
+header .title .anchor{color:var(--brass);margin-right:9px;font-weight:400}
+header .title span{font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif}
+header a{color:#9fd3d6}
+#saveState{color:#d8c58a}
+header .btn{background:transparent;border-color:var(--brass);color:#f1e3b8;border-radius:3px}
+header .btn:hover{background:rgba(201,162,74,.22)}
+nav{padding-top:14px;gap:3px}
+nav button{background:#0a202a;border:1px solid #06161d;border-bottom:none;color:#a9bcb8;border-radius:4px 4px 0 0;font-family:var(--mincho);font-size:14px;letter-spacing:.06em}
+nav button:hover{color:#fff}
+nav button.active{background:var(--surface);color:var(--navy);box-shadow:inset 0 3px 0 var(--brass)}
+.card{border:1px solid #06161d;border-radius:0 6px 6px 6px;box-shadow:0 3px 14px rgba(0,0,0,.28)}
+.card+.card{border-radius:6px}
+h2{font-family:var(--mincho);font-size:17px;letter-spacing:.08em;padding-bottom:6px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+input[type=text],input[type=password],input[type=datetime-local],select,textarea,.login-box input{background:#fffdf5;border-radius:3px}
+.btn{border-radius:3px;background:#fffdf5}
+.btn:hover{background:var(--paper2)}
+.btn.primary:hover{background:var(--navy2)}
+table.list th,table.grid th{background:var(--paper2)}
+table.list tbody tr:hover td{background:#efe7cd}
+.tag{background:#fffdf5;border-radius:2px}
+.tag.ok{background:#e6f1e4;border-color:#a9cdaa}
+.tag.ng{background:#fbece4;border-color:#e0a38e}
+.tag.wait{background:#fbf0dc;border-color:#dcb98a}
+.actions{background:var(--surface)}
+.scroll.tall{border-radius:3px;background:#fffdf5}
+.scroll.tall.big{max-height:62vh}
+td.stale{color:var(--ng);font-weight:700}
+.hist{border-radius:4px;background:#fffdf5}
+.login-body{background-color:var(--bg)}
+.login-box{border-radius:6px;border-top:4px solid var(--brass);background:var(--surface)}
+.login-box h1{font-family:var(--mincho);letter-spacing:.1em}
+/* データ更新の記録 */
+.log details{border-bottom:1px solid var(--border)}
+.log summary{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:8px 4px;cursor:pointer;font-size:13px;list-style:none}
+.log summary::-webkit-details-marker{display:none}
+.log summary::before{content:"▸";color:var(--sub);width:10px}
+.log details[open] summary::before{content:"▾"}
+.log summary:hover{background:#efe7cd}
+.log .when{font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy)}
+.log .trig{color:var(--sub);font-size:12px;min-width:7.5em}
+.log .nums{flex:1;min-width:14em;font-variant-numeric:tabular-nums}
+.log-body{padding:2px 4px 12px 22px;font-size:12.5px;color:var(--text);line-height:1.8}
+.log-body b{color:var(--navy)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}

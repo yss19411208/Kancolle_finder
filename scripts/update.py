@@ -36,7 +36,7 @@ DT_FMT = "%Y/%m/%d %H:%M:%S"
 DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 # 過去月のアーカイブ。ファイル名は <種別>-<翌月1日0時(UTC)のUNIX時刻を16進>.gz
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
-STATE_VERSION = 2
+STATE_VERSION = 3
 MAX_ARCHIVE_MONTHS = 12  # さかのぼって取得する過去月の上限
 DATA_START_MONTH = "2026-09"   # 常駐ドロップの率はこの月から毎月積み上げる (開始時点で 3 か月分)
 RATE_MODES = ("node_s", "node_all", "map_all")
@@ -62,7 +62,9 @@ STYPE_TI = {8: 0, 9: 0, 10: 0, 12: 0, 7: 1, 11: 1, 18: 1, 5: 2, 6: 2,
 MAX_WORLD = 7            # 通常海域のみ (イベント海域は対象外)
 BUILD_TOP_RECIPES = 60   # 1 艦あたりに出力するレシピ数の上限
 BUILD_TOP_SECRETARY = 12
-HISTORY_DETAIL_MAX = 20  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
+HISTORY_DETAIL_MAX = 20
+LOG_KEEP = 40             # 管理画面に出す「データ更新の記録」の保持件数
+LOG_DETAIL_MAX = 15  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
 
 
 def log(*a):
@@ -275,6 +277,7 @@ def aggregate_drops(path, routes, ships, resident_ids, cuts=()):
     hden = defaultdict(int)      # (month, mapId, cell, hour, rank) -> n
     hsid = defaultdict(int)      # (month, mapId, cell, hour, rank, sid) -> n
     boss = set()
+    lastdrop = {}                # (month, mapId, cell, sid) -> 最後にドロップした時刻
     meta = {}
     total = used = 0
     for d in iter_archive_docs(path):
@@ -310,8 +313,12 @@ def aggregate_drops(path, routes, ships, resident_ids, cuts=()):
         used += 1
         cnt[(mo, map_id, cell, rc, sid)] += 1
         hden[(mo, map_id, cell, hour, rc)] += 1
-        if sid and (map_id, cell, sid) not in resident_ids:
-            hsid[(mo, map_id, cell, hour, rc, sid)] += 1
+        if sid:
+            k = (mo, map_id, cell, sid)
+            if ts > lastdrop.get(k, 0):
+                lastdrop[k] = ts
+            if (map_id, cell, sid) not in resident_ids:
+                hsid[(mo, map_id, cell, hour, rc, sid)] += 1
         if d.get("isBoss"):
             boss.add((map_id, cell))
         m = meta.setdefault(mo, [0, ts, ts])
@@ -329,7 +336,7 @@ def aggregate_drops(path, routes, ships, resident_ids, cuts=()):
     out = {}
     for mo, (n, first, last) in meta.items():
         out[mo] = {"v": STATE_VERSION, "month": mo, "records": n, "first": first, "last": last,
-                   "cuts": cuts, "final": False, "tot": {}, "hden": {}, "hsid": {}}
+                   "cuts": cuts, "final": False, "tot": {}, "hden": {}, "hsid": {}, "lastdrop": {}}
     unknown = set()
     for (mo, map_id, cell, rc, sid), n in cnt.items():
         m, node = place(map_id, cell)
@@ -351,6 +358,11 @@ def aggregate_drops(path, routes, ships, resident_ids, cuts=()):
         h = (out[mo]["hsid"].setdefault(m, {}).setdefault(node, {})
              .setdefault(str(sid), {}).setdefault(str(hour), [0, 0]))
         h[rc] += n
+    for (mo, map_id, cell, sid), ts in lastdrop.items():
+        m, node = place(map_id, cell)
+        d = out[mo]["lastdrop"].setdefault(m, {}).setdefault(node, {})
+        if ts > d.get(str(sid), 0):
+            d[str(sid)] = ts
     if unknown:
         warn("マス名が不明なセルがあります (#番号で表示): " + ", ".join(sorted(unknown)[:30]))
     return out
@@ -711,6 +723,62 @@ def build_build_data(states, ships, now):
     }
 
 
+def build_last_drop(states, ships, now):
+    """各海域・各マスで、各艦が最後にドロップした日時 (管理画面用)。"""
+    name_of = {int(k): v["name"] for k, v in ships.items()}
+    best = {}
+    for mo in states:
+        for m, nodes in states[mo].get("lastdrop", {}).items():
+            for node, d in nodes.items():
+                if node.startswith("#"):
+                    continue
+                for sid, ts in d.items():
+                    k = (m, node, name_of.get(int(sid), f"ID:{sid}"))
+                    if ts > best.get(k, 0):
+                        best[k] = ts
+    maps = {}
+    for (m, node, name), ts in sorted(best.items(), key=lambda kv: (map_key(kv[0][0]), kv[0][1], kv[0][2])):
+        maps.setdefault(m, {}).setdefault(node, {})[name] = fmt_dt(ts)[:16]
+    return {"months": sorted(states), "maps": maps}
+
+
+def write_update_log(old, new, build, old_build, now, notes):
+    """1 回の集計で何が変わったかを data/update_log.json に残す (管理画面の「データ更新の記録」)。"""
+    on, ol = drop_sets(old)
+    nn, nl = drop_sets(new)
+    label = lambda s: [f"{m}-{node} {name}" for m, node, name in  # noqa: E731
+                       sorted(s, key=lambda x: (map_key(x[0]), x[1], x[2]))][:LOG_DETAIL_MAX]
+    has_old = bool(old and old.get("maps"))
+    entry = {
+        "at": fmt_dt(now),
+        "trigger": os.environ.get("GITHUB_EVENT_NAME", "manual"),
+        "drop_records": new.get("records", 0),
+        "drop_added": new.get("records", 0) - (old or {}).get("records", 0) if has_old else None,
+        "build_records": build.get("records", 0),
+        "build_added": build.get("records", 0) - (old_build or {}).get("records", 0) if old_build else None,
+        "data_to": new.get("data_to"),
+        "months": new.get("months"),
+        "cutoff": new.get("cutoff"),
+        "limited": len(nl),
+        "resident": len(nn),
+        "limited_added_n": len(nl - ol) if has_old else None,
+        "limited_removed_n": len(ol - nl) if has_old else None,
+        "resident_added_n": len(nn - on) if has_old else None,
+        "resident_removed_n": len(on - nn) if has_old else None,
+        "limited_added": label(nl - ol) if has_old else [],
+        "limited_removed": label(ol - nl) if has_old else [],
+        "resident_added": label(nn - on) if has_old else [],
+        "resident_removed": label(on - nn) if has_old else [],
+        "notes": notes,
+    }
+    path = os.path.join(ROOT, "data", "update_log.json")
+    log_list = load_json(path, [])
+    if not isinstance(log_list, list):
+        log_list = []
+    log_list.append(entry)
+    save_json(path, log_list[-LOG_KEEP:])
+
+
 # ---------------------------------------------------------------- 更新履歴
 def drop_sets(data):
     normal, limited = set(), set()
@@ -813,6 +881,7 @@ def main():
     drop_states = load_state(args.state_dir, "drop")
     build_states = load_state(args.state_dir, "build")
     failed = []
+    notes = []
     res_ids = resident_id_set(resident, ships, routes)
     cuts = []
     for u in cfg["updates"]:
@@ -829,6 +898,7 @@ def main():
                  and month_of(now) in drop_states)
     if skip_dump:
         log(f"当月ダンプは {fmt_dt(meta['fetched_at'])} に取得済みのため再取得しません")
+        notes.append(f"当月ダンプは取得済みのものを使用 ({fmt_dt(meta['fetched_at'])} 取得)")
     with tempfile.TemporaryDirectory() as tmp:
         jobs = [("drop", args.drop_file, "dropshiprecords.gz"),
                 ("build", args.create_file, "createshiprecords.gz")]
@@ -842,6 +912,7 @@ def main():
                     log(f"  {size / 1e6:.1f} MB")
                 except Exception as e:  # noqa: BLE001
                     warn(f"{fname} を取得できませんでした。保存済みデータで続行します: {e}")
+                    notes.append(f"{fname} を取得できず、保存済みデータで集計")
                     failed.append(fname)
                     path = None
             if not path:
@@ -858,6 +929,7 @@ def main():
                     build_states = merge_state(args.state_dir, "build", build_states, new)
             except Exception as e:  # noqa: BLE001
                 warn(f"{fname} の解析に失敗しました。保存済みデータで続行します: {e}")
+                notes.append(f"{fname} の解析に失敗")
                 failed.append(fname)
             if not given:
                 try:
@@ -894,8 +966,10 @@ def main():
                         raise RuntimeError(f"{mo} の記録が含まれていません")
                     new[mo]["final"] = True
                     drop_states = merge_state(args.state_dir, "drop", drop_states, {mo: new[mo]}, force=True)
+                    notes.append(f"{mo} の過去月アーカイブを取り込み ({new[mo]['records']:,} 件)")
                 except Exception as e:  # noqa: BLE001
                     warn(f"{mo} の過去月アーカイブを取り込めませんでした (月初 1〜2 日は未公開のことがあります): {e}")
+                    notes.append(f"{mo} の過去月アーカイブを取り込めず")
                 finally:
                     try:
                         os.remove(path)
@@ -906,6 +980,11 @@ def main():
     drop = build_drop_data(drop_states, resident, cfg, ships, now)
     build = build_build_data(build_states, ships, now)
     append_history(old_drop, drop, now)
+    old_build = load_json(os.path.join(ROOT, "Build_Data.json"))
+    write_update_log(old_drop, drop, build, old_build, now, notes)
+    last = build_last_drop(drop_states, ships, now)
+    if load_json(os.path.join(ROOT, "data", "last_drop.json")) != last:
+        save_json(os.path.join(ROOT, "data", "last_drop.json"), last, compact=True)
 
     # 中身が変わらない日はファイルを書き換えない (無駄なコミットを避ける)
     def same(a, b):

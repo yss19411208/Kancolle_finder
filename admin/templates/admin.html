@@ -10,7 +10,7 @@
 </head>
 <body>
 <header>
-  <div class="title">艦これ ドロップ検索<span>管理画面</span></div>
+  <div class="title"><b class="anchor" aria-hidden="true">⚓</b>艦これ ドロップ検索<span>管理画面</span></div>
   <span id="saveState"></span>
   <button class="btn small" type="button" id="reloadBtn">最新に更新</button>
   <a href="{{ site_url }}" target="_blank" rel="noopener">公開ページ</a>
@@ -22,6 +22,7 @@
   <button data-tab="updates">アップデート日時</button>
   <button data-tab="resident">常駐リスト</button>
   <button data-tab="limited">限定ドロップ</button>
+  <button data-tab="lastdrop">最終ドロップ</button>
   <button data-tab="history">更新履歴</button>
 </nav>
 <div id="toast"></div>
@@ -31,6 +32,11 @@
   <div class="card">
     <h2>公開中のデータ</h2>
     <div id="dashInfo" class="kv">読み込み中...</div>
+  </div>
+  <div class="card">
+    <h2>データ更新の記録</h2>
+    <p class="note">集計のたびに、前回から何が変わったかを記録します（新しい順）。行を押すと、追加・終了した艦の内訳が開きます。自動更新は毎日 07:17 頃（日本時間）です。</p>
+    <div id="logList" class="log"></div>
   </div>
   <div class="card">
     <h2>ドロップ率の計算方法</h2>
@@ -109,6 +115,30 @@
   <div class="card">
     <h2>除外リスト</h2>
     <table class="list" id="exTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th></th></tr></thead><tbody></tbody></table>
+  </div>
+</section>
+
+<section id="tab-lastdrop">
+  <div class="card">
+    <h2>最終ドロップ</h2>
+    <p class="note">各海域・各マスで、その艦が最後にドロップした日時です（日本時間、S/A/B 勝利の記録）。限定ドロップがいつ止まったかの確認に使えます。<span id="ldRange"></span></p>
+    <div class="row">
+      <input type="text" id="ldFilter" placeholder="艦名・海域で絞り込み（例: 酒匂 / 1-4 / 2-5-O）" class="grow">
+      <select id="ldKind">
+        <option value="all">すべて</option>
+        <option value="limited">限定として掲載中</option>
+        <option value="normal">常駐</option>
+        <option value="none">掲載なし（過去の限定など）</option>
+      </select>
+      <select id="ldSort">
+        <option value="old">最終ドロップが古い順</option>
+        <option value="new">最終ドロップが新しい順</option>
+        <option value="place">海域・マス順</option>
+        <option value="ship">艦名順</option>
+      </select>
+    </div>
+    <div id="ldCount" class="note"></div>
+    <div class="scroll tall big"><table class="list" id="ldTable"><thead><tr><th>艦名</th><th>海域</th><th>マス</th><th>区分</th><th>最終ドロップ</th><th>経過</th></tr></thead><tbody></tbody></table></div>
   </div>
 </section>
 
