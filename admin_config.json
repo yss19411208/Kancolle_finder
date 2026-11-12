@@ -15,5 +15,11 @@
   ],
   "limited_exclude": [],
   "limited_keep": [],
-  "auto_resident_exclude": []
+  "auto_resident_exclude": [
+    {
+      "map": "1-4",
+      "node": "D",
+      "ship": "朧"
+    }
+  ]
 }
