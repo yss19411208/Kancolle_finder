@@ -317,8 +317,8 @@ function renderResident() {
   checkResidentNames();
 }
 // ---------------------------------------------------------------- 常設の判定 (data/judge.json)
-const JG_CLASS = { continuous: 'ok', added: 'ok', new: 'ok', stopped: 'ng', intermittent: 'ok', misreport: 'ng', none: '' };
-const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み・その後も出ている', manual: '手動で常設', page: '限定ページで継続中', auto: '', manual_off: '手動で外した', new: '', intermittent: '再開後の率', stopped: '', misreport: '' };
+const JG_CLASS = { continuous: 'ok', added: 'ok', new: 'ok', stopped: 'ng', intermittent: 'ok', misreport: 'ng', fewnode: 'ng', none: '' };
+const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み・その後も出ている', manual: '手動で常設', page: '限定ページで継続中', auto: '', manual_off: '手動で外した', unconfirmed: 'アップデート後に未確認・件数不足', fewnode: '', new: '', intermittent: '再開後の率', stopped: '', misreport: '' };
 let jgRows = [];
 function renderJudge() {
   const j = S.judge || { columns: [], rows: [], labels: {} };
@@ -342,7 +342,7 @@ function drawJudge() {
   const pub = r => r.published === '常設';
   const f = {
     check: r => (r.wiki && !pub(r)) || (!r.wiki && pub(r)) || r.class === 'stopped',
-    wikinot: r => r.wiki && !pub(r), notwiki: r => !r.wiki && pub(r), stopped: r => r.class === 'stopped', misreport: r => r.class === 'misreport',
+    wikinot: r => r.wiki && !pub(r), notwiki: r => !r.wiki && pub(r), stopped: r => r.class === 'stopped', misreport: r => r.class === 'misreport', unconfirmed: r => r.why === 'unconfirmed',
     pubnone: r => !r.published, all: () => true,
   }[view] || (r => r.published === view.slice(3));
   const rows = jgRows.filter(r => f(r) && matchQ(r.key, q));

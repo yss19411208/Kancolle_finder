@@ -112,10 +112,11 @@
     <ul class="legend">
       <li><span class="tag ok">全期間で出ている</span>判定期間のはじめから今まで出ている → 常設</li>
       <li><span class="tag ok">途中から出始め、定着</span>途中から出始めて 60 日以上 → 常設</li>
-      <li><span class="tag ok">最近出始めた</span>新艦・ドロップ表の変更など。出始めて 60 日未満 → 常設</li>
+      <li><span class="tag ok">最近出始めた</span>新艦・ドロップ表の変更など。出始めて 60 日未満 → 常設。ただし最新のアップデート後に 1 回も出ていない、または 2 件以下なら、確認できるまで載せない（終わったばかりの限定を常設にしないため）</li>
       <li><span class="tag ok">途切れた期間あり・今は出ている</span>ドロップ表が変わって戻った等 → 常設（率は再開後の分で計算）</li>
       <li><span class="tag ng">出なくなった</span>今は出ていない → 載せない（常設から外れた、または限定が終わった）</li>
       <li><span class="tag ng">誤報告の疑い</span>出始めてから戦闘 2,000 回以上で 2 件以下 → 載せない</li>
+      <li><span class="tag ng">記録が少ないマス</span>判定期間の戦闘が 100 回未満のマス（資源マスなど、戦闘の無いマスに紛れ込んだ記録）→ 載せない</li>
       <li><span class="tag">期間内に出ていない</span>Wiki の出撃ドロップにはあるが、判定期間に 1 回も出ていない</li>
     </ul>
     <p class="note"><strong>限定になるのは、期間限定ドロップイベントのページで継続中になっている艦だけ</strong>です（アップデート日時以降に出ているもの）。データだけで常設を限定にすることはありません。それ以外で今も出ている艦は、新艦や告知なしの変更も含めて常設です。判定が違うときは「常設にする」「常設から外す」を押してください（その場で保存され、再集計が始まります）。</p>
@@ -128,6 +129,7 @@
         <option value="notwiki">Wiki に無いが常設にしている</option>
         <option value="stopped">出なくなった</option>
         <option value="misreport">誤報告の疑い</option>
+        <option value="unconfirmed">アップデート後に未確認</option>
         <option value="pub常設">公開: 常設</option>
         <option value="pub限定">公開: 限定</option>
         <option value="pub1隻報告">公開: 1隻報告（非掲載）</option>

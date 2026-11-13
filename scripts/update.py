@@ -69,8 +69,9 @@ BUILD_TOP_RECIPES = 60   # 1 艦あたりに出力するレシピ数の上限
 BUILD_TOP_SECRETARY = 12
 HISTORY_DETAIL_MAX = 20
 LOG_KEEP = 40             # 管理画面に出す「データ更新の記録」の保持件数
-LOG_DETAIL_MAX = 15
-SINGLE_MIN_BATTLES = 2000    # 報告 1 件だけで、そのマスの戦闘数がこれ以上なら誤報告とみなして掲載しない  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
+LOG_DETAIL_MAX = 15       # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
+MIN_NODE_BATTLES = 100   # 判定期間の戦闘がこれ未満のマスは載せない (戦闘の無いマスの誤った記録など)
+SINGLE_MIN_BATTLES = 2000    # 報告 1 件だけで、そのマスの戦闘数がこれ以上なら誤報告とみなして掲載しない
 
 
 def log(*a):
@@ -555,6 +556,7 @@ JUDGE_LABEL = {
     "intermittent": "途切れた期間あり・今は出ている",
     "misreport": "誤報告の疑い",
     "none": "期間内に出ていない",
+    "fewnode": "記録が少ないマス",
 }
 
 
@@ -590,13 +592,19 @@ def judge_pairs(states, months, now):
                     continue
                 for sid, bks in sids.items():
                     k = (m, node, int(sid))
-                    rec = out.setdefault(k, {"c": [0] * nweeks})
+                    rec = out.setdefault(k, {"c": [0] * nweeks, "b0": None, "b1": None})
                     for bk, (a, b) in bks.items():
                         w = (int(bk) - w0) // WEEK
-                        if 0 <= w < nweeks:
+                        if 0 <= w < nweeks and a + b:
                             rec["c"][w] += a + b
+                            bk = int(bk)
+                            rec["b0"] = bk if rec["b0"] is None else min(rec["b0"], bk)
+                            rec["b1"] = bk if rec["b1"] is None else max(rec["b1"], bk)
     for (m, node, sid), rec in out.items():
         c, n = rec.pop("c"), den[(m, node)]
+        b0, b1 = rec.pop("b0"), rec.pop("b1")
+        if b0 is None:
+            continue
         C, N = sum(c), sum(n)
         act = [w for w in range(nweeks) if c[w]]
         first, last = act[0], act[-1]
@@ -626,9 +634,9 @@ def judge_pairs(states, months, now):
             cls = "added" if now - (w0 + first * WEEK) >= NEW_DAYS * DAY else "new"
         else:
             cls = "continuous"
-        rec.update(cls=cls, C=C, N=N, first=w0 + first * WEEK, last=w0 + (last + 1) * WEEK - 1, weeks=len(act),
+        rec.update(cls=cls, C=C, N=N, first=b0, last=b1, weeks=len(act),
                    seg=(w0 + seg * WEEK) if seg else None)
-    return out
+    return {k: v for k, v in out.items() if "cls" in v}
 
 
 def build_drop_data(states, cfg, ships, now, wiki=None):
@@ -765,6 +773,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             k3 = (m, node, nn)
             j = judged.get((m, node, sid), {})
             cls = j.get("cls", "")
+            if j and nS + nO < MIN_NODE_BATTLES:
+                cls = "fewnode"     # 戦闘の無いマス (資源マスなど) に紛れ込んだ記録。率も意味をなさない
             page = ("ongoing" if (k3 in on_node or (m, nn) in on_map)
                     else "ended" if (k3 in ended or (m, None, nn) in ended) else "")
             # 公開ページでの扱い
@@ -772,6 +782,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
                 pub, why = "常設", "manual"
             elif page == "ongoing":
                 pub, why = "限定", "page"
+            elif cls == "fewnode":
+                pub, why = "", cls
             elif k3 in res_off:
                 pub, why = "", "manual_off"
             elif cls in ("continuous", "added", "new", "intermittent"):
@@ -779,6 +791,15 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             else:
                 pub, why = "", cls          # stopped / misreport / 記録なし: 載せない
             ds, do = since_sid.get((m, node, sid), (0, 0))
+            # 出始めて (再開して) 60 日未満の艦は、最新のアップデート後にも出ていることを確かめてから常設にする。
+            # 限定がメンテナンスで終わった直後は「出なくなった」と言えるだけの戦闘数がまだ無いため
+            if pub == "常設" and why != "manual" and cutoff is not None and not (ds + do):
+                began = j.get("seg") or (j.get("first") if cls == "new" else None)
+                if began and now - began < NEW_DAYS * DAY and began < cutoff:
+                    pub, why = "", "unconfirmed"
+            # 出始めたばかりで 2 件以下は、まだ誤報告と見分けられないので載せない
+            if pub == "常設" and why == "new" and j.get("C", 0) <= 2:
+                pub, why = "", "unconfirmed"
             if pub == "常設":
                 seg = j.get("seg")
                 if seg:
