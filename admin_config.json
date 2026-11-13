@@ -13,7 +13,13 @@
       "ship": "秋津洲"
     }
   ],
-  "limited_exclude": [],
+  "limited_exclude": [
+    {
+      "map": "3-1",
+      "node": "G",
+      "ship": "天霧"
+    }
+  ],
   "limited_keep": [],
   "auto_resident_exclude": []
 }
