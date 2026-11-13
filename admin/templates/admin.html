@@ -30,17 +30,29 @@
 <main>
 
 <section id="tab-dash" class="active">
-  <div class="card">
-    <h2>公開中のデータ</h2>
-    <div id="dashInfo" class="kv">読み込み中...</div>
+  <div class="card" data-title="状況">
+    <h2>状況</h2>
+    <div class="split">
+      <div class="col">
+        <h3>公開中のデータ</h3>
+        <div id="dashInfo" class="kv">読み込み中...</div>
+      </div>
+      <div class="col">
+        <h3>再集計</h3>
+        <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 05:07〜09:07 に毎時 1 回と、設定の保存時にも自動で実行されます。過去月の取り込みが残っているときは、終わるまで自動で続けて実行されます。</p>
+        <div class="row"><button class="btn primary" id="rerunBtn">今すぐ再集計する</button><button class="btn" id="runsReload">状況を更新</button></div>
+        <div class="fill"><table class="list" id="runsTable"><thead><tr><th class="k">開始</th><th>きっかけ</th><th class="k">状態</th><th class="k" style="width:4em"></th></tr></thead><tbody></tbody></table></div>
+      </div>
+    </div>
   </div>
-  <div class="card">
+  <div class="card" data-title="データ更新の記録">
     <h2>データ更新の記録</h2>
     <p class="note">集計のたびに、前回から何が変わったかを記録します（新しい順）。行を押すと、追加・終了した艦の内訳が開きます。自動更新は毎日 05:07〜09:07（日本時間）に毎時 1 回です。poi のデータは 1 日 1 回なので、実際に件数が増えるのは最初の 1 回だけです。</p>
-    <div id="logList" class="log"></div>
+    <div class="fill free"><div id="logList" class="log"></div></div>
   </div>
-  <div class="card">
-    <h2>ドロップ率の計算方法</h2>
+  <div class="card" data-title="設定">
+    <h2>設定</h2>
+    <h3>ドロップ率の計算方法</h3>
     <p class="note">公開ページに表示する％の出し方です。変更はその場で保存され、再集計後に反映されます。</p>
     <div class="row">
       <select id="rateMode">
@@ -49,24 +61,15 @@
         <option value="map_all">海域全体（その海域の全勝利のうち、そのマスでその艦が出た割合）</option>
       </select>
     </div>
-  </div>
-  <div class="card">
-    <h2>常設を判定する期間</h2>
-    <p class="note">poi の記録を何か月分さかのぼって常設かどうかを判定するかです。長くすると判定は確かになりますが、初回の集計で過去の月を少しずつ（1 回 4 か月分）取り込むため、全部そろうまで数回の自動更新がかかります。変更はその場で保存されます。</p>
+    <h3>常設を判定する期間</h3>
+    <p class="note">poi の記録を何か月分さかのぼって常設かどうかを判定するかです。長くすると判定は確かになりますが、過去の月を取り込み終わるまで数回の自動更新がかかります（自動で続けて実行されます）。変更はその場で保存されます。</p>
     <div class="row">
       <select id="histMonths">
         <option value="3">3 か月</option><option value="6">6 か月</option><option value="12">12 か月</option>
         <option value="24">24 か月</option><option value="36">36 か月</option><option value="48">48 か月</option>
       </select>
-      <span id="histMonthsNow" class="note"></span>
+      <span id="histMonthsNow" class="sub-note"></span>
     </div>
-  </div>
-  <div class="card">
-    <h2>再集計</h2>
-    <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 05:07〜09:07 に毎時 1 回と、設定の保存時にも自動で実行されます。</p>
-    <button class="btn primary" id="rerunBtn">今すぐ再集計する</button>
-    <button class="btn" id="runsReload">状況を更新</button>
-    <table class="list" id="runsTable"><thead><tr><th>開始</th><th>きっかけ</th><th>状態</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
@@ -74,7 +77,7 @@
   <div class="card">
     <h2>アップデート日時</h2>
     <p class="note">限定ドロップは、ここに登録した日時のうち<strong>現在時刻以前で最も新しいもの</strong>以降の報告だけで集計します（秒単位）。日時が先月以前なら、その月から今月までの記録を使います。未来の日時も登録でき、その時刻を過ぎた最初の集計から切り替わります。<strong>追加・削除はその場で保存され</strong>、再集計が自動で始まります。</p>
-    <table class="list" id="updTable"><thead><tr><th>日時（日本時間）</th><th>メモ</th><th>状態</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="fill"><table class="list" id="updTable"><thead><tr><th class="k" style="width:13em">日時（日本時間）</th><th>メモ</th><th class="k" style="width:8em">状態</th><th class="k" style="width:5em"></th></tr></thead><tbody></tbody></table></div>
     <div class="row">
       <input type="datetime-local" id="updAt" step="1">
       <input type="text" id="updNote" placeholder="メモ（例: 秋イベント前メンテ）" class="grow">
@@ -94,14 +97,14 @@
       <span class="grow"></span>
       <span id="resWarn" class="warn"></span>
     </div>
-    <div class="scroll"><table class="grid" id="resTable"></table></div>
+    <div class="fill free"><table class="grid" id="resTable"></table></div>
     <div class="actions"><button class="btn primary save" data-save="resident">保存</button><span class="unsaved">未保存の変更があります。保存するまで反映されません。</span></div>
   </div>
   <div class="card">
     <h2>Wiki との差分を確認</h2>
     <p class="note">艦これ Wiki「出撃ドロップ」ページをブラウザで保存した HTML を選ぶと、青字（期間限定）以外を常駐として読み取り、上の表との差分を表示します。反映は上の表で手入力してください。ファイルはこのブラウザ内で解析され、サーバーには送信されません。</p>
     <input type="file" id="wikiFile" accept=".html,.htm,text/html">
-    <div id="wikiDiff"></div>
+    <div class="fill free"><div id="wikiDiff"></div></div>
   </div>
 </section>
 
@@ -151,32 +154,38 @@
       </select>
     </div>
     <div id="jgCount" class="note"></div>
-    <div class="scroll tall big"><table class="list" id="jgTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>データの判定</th><th>公開</th><th>ドロップ / 戦闘</th><th>初ドロップ</th><th>最終ドロップ</th><th>変化・目印</th><th>Wiki</th><th>限定ページ</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="fill"><table class="list" id="jgTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k" style="width:8.5em">艦名</th><th class="k" style="width:10em">データの判定</th><th style="width:7.5em">公開</th><th class="m1 num" style="width:9.5em">ドロップ / 戦闘</th><th class="m1" style="width:6.5em">初ドロップ</th><th class="m2" style="width:11.5em">最終ドロップ</th><th>変化・目印</th><th class="m1" style="width:3.5em">Wiki</th><th class="m2">限定ページ</th><th style="width:12.5em"></th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card">
-    <h2>手動で常設にしたもの</h2>
-    <table class="list" id="forceTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
-    <h2 style="margin-top:16px">手動で常設から外したもの</h2>
-    <table class="list" id="autoOffTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
+    <h2>手動で変えたもの</h2>
+    <div class="split">
+      <div class="col"><h3>手動で常設にしたもの</h3>
+        <div class="fill"><table class="list" id="forceTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th>最終ドロップ</th><th class="k" style="width:6em"></th></tr></thead><tbody></tbody></table></div></div>
+      <div class="col"><h3>手動で常設から外したもの</h3>
+        <div class="fill"><table class="list" id="autoOffTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th>最終ドロップ</th><th class="k" style="width:6em"></th></tr></thead><tbody></tbody></table></div></div>
+    </div>
   </div>
 </section>
 
 <section id="tab-limited">
   <div class="card">
-    <h2>自動検出された限定ドロップ</h2>
+    <h2>限定ドロップ（公開中）</h2>
     <p class="note">期間限定ドロップイベントのページで継続中になっていて、アップデート日時以降に poi で出ている艦です（公開中のデータ時点）。「限定ページのイベント」は、艦これ攻略Wiki「期間限定ドロップイベント」で同じ海域・マス・艦が載っているイベントです（継続中を先に、新しい順）。誤りなら「除外」、常設なら「常設にする」を押してください（その場で保存され、数分後に公開ページへ反映）。</p>
     <div class="row"><input type="text" id="limFilter" placeholder="絞り込み（海域・艦名）" class="grow"></div>
-    <div class="scroll tall"><table class="list" id="autoTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>報告</th><th>理由</th><th>最終ドロップ</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="fill"><table class="list" id="autoTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k" style="width:8.5em">艦名</th><th class="k" style="width:6em">ドロップ率</th><th class="m1" style="width:7em">報告</th><th class="m1" style="width:10em">理由</th><th class="m2" style="width:11.5em">最終ドロップ</th><th>限定ページのイベント</th><th style="width:11em"></th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card">
-    <h2>⚠ 1隻報告（掲載していないもの）</h2>
+    <h2>1隻報告</h2>
     <p class="note">アップデート日時以降の報告が 1 件だけで、そのマスの戦闘が 2,000 回以上あるものです。誤報告の可能性が高いので公開ページには載せていません。本物なら「復元」を押すと掲載されます（その場で保存）。報告が 2 件以上になれば自動で掲載されます。</p>
-    <table class="list" id="singleTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>戦闘数</th><th>最終ドロップ</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table>
-    <h2 style="margin-top:16px">復元したもの</h2>
-    <table class="list" id="keepTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="split">
+      <div class="col wide"><h3>掲載していないもの</h3>
+        <div class="fill"><table class="list" id="singleTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th class="m1" style="width:6em">戦闘数</th><th class="m2">最終ドロップ</th><th class="m1">限定ページのイベント</th><th class="k" style="width:5em"></th></tr></thead><tbody></tbody></table></div></div>
+      <div class="col"><h3>復元したもの</h3>
+        <div class="fill"><table class="list" id="keepTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th class="m2">最終ドロップ</th><th class="k" style="width:6em"></th></tr></thead><tbody></tbody></table></div></div>
+    </div>
   </div>
   <div class="card">
-    <h2>手動で追加した限定ドロップ</h2>
+    <h2>手動の限定</h2>
     <p class="note">poi にまだ報告が無いものを先に掲載したいときに使います。追加日時より後のアップデート日時が有効になると自動的に外れます。追加・削除はその場で保存されます。</p>
     <div class="row">
       <select id="manMap"></select>
@@ -184,12 +193,12 @@
       <input type="text" id="manShip" placeholder="艦名" list="shipNames" class="grow">
       <button class="btn" id="manAdd">追加</button>
     </div>
-    <div class="scroll tall"><table class="list" id="manTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>追加日時</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="fill"><table class="list" id="manTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th class="m1">追加日時</th><th class="m2">最終ドロップ</th><th class="k" style="width:5em"></th></tr></thead><tbody></tbody></table></div>
     <div class="row"><button class="btn danger" id="manClear">手動分をすべて削除</button></div>
   </div>
   <div class="card">
     <h2>除外リスト</h2>
-    <table class="list" id="exTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="fill"><table class="list" id="exTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th>最終ドロップ</th><th class="k" style="width:5em"></th></tr></thead><tbody></tbody></table></div>
   </div>
 </section>
 
@@ -223,7 +232,7 @@
       </select>
     </div>
     <div id="ldCount" class="note"></div>
-    <div class="scroll tall big"><table class="list" id="ldTable"><thead><tr><th>艦名</th><th>海域</th><th>マス</th><th>区分</th><th>最終ドロップ</th><th>経過</th><th>ドロップ数</th></tr></thead><tbody></tbody></table></div>
+    <div class="fill"><table class="list" id="ldTable"><thead><tr><th class="k">艦名</th><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th style="width:10em">区分</th><th class="k" style="width:10em">最終ドロップ</th><th class="m2" style="width:6em">経過</th><th class="m1" style="width:7em">ドロップ数</th></tr></thead><tbody></tbody></table></div>
   </div>
 </section>
 
@@ -232,12 +241,13 @@
     <h2>更新履歴</h2>
     <p class="note">ドロップの追加・終了は集計時に自動で追記されます（「自動」の印）。ここでは手書きの追加と修正ができます。1 行が 1 項目です。</p>
     <div class="row"><button class="btn" id="histAdd">今日の項目を追加</button></div>
-    <div id="histList"></div>
+    <div class="fill free"><div id="histList"></div></div>
     <div class="actions"><button class="btn primary save" data-save="history">保存</button><span class="unsaved">未保存の変更があります。保存するまで反映されません。</span></div>
   </div>
 </section>
 
 </main>
+<aside id="drawer" hidden><div class="drawer-head"><b id="drawerTitle"></b><button class="btn small" type="button" id="drawerClose">閉じる</button></div><dl id="drawerBody"></dl></aside>
 <datalist id="shipNames"></datalist>
 <script src="{{ url_for('static', filename='admin.js') }}"></script>
 </body>

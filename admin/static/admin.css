@@ -137,3 +137,85 @@ td .sub{font-size:11px;color:var(--sub);margin-top:2px}
 #jgTable td:nth-child(10){min-width:16em}
 .btns{display:flex;gap:4px;flex-wrap:wrap}
 #jgTable td.notes{min-width:14em;font-size:12px}
+
+/* ================= 1 画面レイアウト (ページ全体はスクロールしない) ================= */
+html,body{height:100%}
+body{display:flex;flex-direction:column;overflow:hidden}
+header{position:static;flex:none;height:48px}
+nav{flex:none;max-width:none;width:100%;padding:8px 12px 0;margin:0}
+nav button{padding:7px 14px;font-size:14px}
+main{flex:1;min-height:0;max-width:none;width:100%;margin:0;padding:0 12px 10px;display:flex;flex-direction:column}
+main>section{display:none;flex:1;min-height:0;flex-direction:column}
+main>section.active{display:flex}
+.subtabs{display:flex;gap:4px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--border);border-bottom:none;border-radius:0 8px 0 0;padding:8px 10px 0}
+.subtabs button{font:inherit;font-size:13px;font-weight:700;color:var(--sub);background:transparent;border:none;border-bottom:3px solid transparent;padding:4px 10px 6px;cursor:pointer}
+.subtabs button.active{color:var(--navy);border-bottom-color:var(--brass)}
+.subtabs button .cnt{font-weight:400;font-size:11px;margin-left:4px;color:var(--sub)}
+main>section>.card{display:none;flex:1;min-height:0;flex-direction:column;margin:0;padding:12px 14px;overflow:hidden}
+main>section>.card.on{display:flex}
+main>section>.subtabs+.card,main>section>.subtabs~.card{border-radius:0 0 8px 8px}
+.card>h2{display:flex;align-items:center;gap:10px;flex:none;margin-bottom:8px}
+.card h3{font-size:13px;color:var(--navy);margin:6px 0 4px;flex:none}
+.card>.row,.card .col>.row{flex:none;margin:6px 0}
+.split{flex:1;min-height:0;display:flex;gap:16px}
+.split>.col{flex:1;min-width:0;min-height:0;display:flex;flex-direction:column}
+.split>.col.wide{flex:1.6}
+.fill{flex:1;min-height:0;overflow:hidden;border:1px solid var(--border);border-radius:6px;background:#fff;position:relative}
+.fill.free{overflow-y:auto;overflow-x:hidden}
+.fill table.list{table-layout:fixed;width:100%}
+.fill table.list th{position:static}
+.fill table.list td{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:5px 7px;font-size:13px}
+.fill table.list td>div,.fill table.list td .sub{display:inline;margin:0 0 0 6px}
+.fill table.list td .btns{display:inline-flex;flex-wrap:nowrap}
+.fill table.list tbody tr{cursor:pointer}
+.fill table.list tbody tr.empty{cursor:default}
+.fill table.list .hide{display:none}
+.fill table.grid{table-layout:fixed;width:100%}
+.fill table.grid textarea{min-width:0!important;width:100%}
+.pager{flex:none;display:flex;align-items:center;gap:8px;justify-content:flex-end;padding:5px 2px 0;font-size:12.5px;color:var(--sub)}
+.pager .btn{padding:2px 12px}
+.pager .info{font-variant-numeric:tabular-nums}
+.pager.single .btn{visibility:hidden}
+.sub-note{font-size:12px;color:var(--sub)}
+.jg-sum{flex:none;margin:0 0 6px;gap:6px}
+.jg-sum div{padding:3px 10px;min-width:0;flex-direction:row;align-items:baseline;gap:6px}
+.jg-sum b{font-size:15px}
+.kv{font-size:13px}
+/* 説明 (h2 の右の「説明」を押すと開く) */
+details.help{position:relative;font-family:"Hiragino Kaku Gothic ProN","Noto Sans JP",system-ui,sans-serif;letter-spacing:0}
+details.help>summary{list-style:none;cursor:pointer;font-size:12px;font-weight:700;color:var(--blue);border:1px solid var(--border);border-radius:12px;padding:0 10px;background:#fff}
+details.help>summary::-webkit-details-marker{display:none}
+details.help[open]>summary{background:var(--navy);color:#fff;border-color:var(--navy)}
+details.help>.help-body{position:absolute;left:0;top:26px;z-index:30;width:min(720px,86vw);max-height:70vh;overflow-y:auto;background:#fff;border:1px solid var(--border);border-top:3px solid var(--brass);border-radius:6px;box-shadow:0 8px 24px rgba(15,58,71,.25);padding:12px 14px;font-size:13px;font-weight:400;color:var(--text)}
+details.help .note{max-width:none}
+/* 詳細の引き出し (行を押すと開く) */
+#drawer{position:fixed;top:0;right:0;bottom:0;width:min(420px,100vw);background:#fff;border-left:3px solid var(--brass);box-shadow:-8px 0 24px rgba(15,58,71,.2);z-index:40;display:flex;flex-direction:column}
+#drawer[hidden]{display:none}
+#drawer .drawer-head{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--navy);color:#fff}
+#drawer .drawer-head b{flex:1;font-family:var(--mincho);letter-spacing:.06em}
+#drawer .drawer-head .btn{background:transparent;color:#f1e3b8;border-color:var(--brass)}
+#drawer dl{flex:1;overflow-y:auto;padding:10px 14px;display:grid;grid-template-columns:7em 1fr;gap:8px 10px;align-content:start;font-size:13px}
+#drawer dt{color:var(--sub);font-size:12px}
+#drawer dd{min-width:0;overflow-wrap:anywhere}
+#drawer dd .btns,#drawer dd .btn{margin:2px 4px 2px 0}
+#drawer dd>div{margin:2px 0}
+.actions{flex:none;position:static;margin-top:8px;padding:8px 0 0}
+.log details[open] .log-body{white-space:normal}
+@media(max-width:900px){.split{flex-direction:column}.split>.col{flex:1}header .title span,header a{display:none}}
+@media(max-width:640px){main{padding:0 6px 6px}nav{padding:6px 6px 0}nav button{padding:5px 8px;font-size:12px}.card>h2{font-size:15px}}
+#jgCount,#ldCount{display:none}
+.subtabs{align-items:center}
+.subtabs .grow{flex:1}
+.subtabs details.help{margin-bottom:4px}
+.subtabs details.help>.help-body{left:auto;right:0}
+.jg-sum .chip{font:inherit;cursor:pointer;background:#f3f8f9;border:1px solid #c9dade;border-radius:6px;padding:2px 9px;display:flex;align-items:baseline;gap:6px;color:var(--text)}
+.jg-sum .chip:hover{background:#e2f0f1;border-color:var(--blue)}
+.jg-sum .chip b{font-size:14px;color:var(--navy)}
+.jg-sum .chip span{font-size:12px;color:var(--sub)}
+.fill table.list td{padding:4px 7px}
+.fill table.list th{padding:5px 7px}
+.fill table.list td .btn.small{padding:1px 8px}
+@media(max-width:700px){.fill table.list th{width:auto!important}.subtabs button{padding:4px 6px 6px;font-size:12px}.jg-sum{display:none}}
+[hidden]{display:none!important}
+header .title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+@media(max-width:640px){header{gap:8px;padding:0 10px}header .title{font-size:15px;letter-spacing:.04em}#saveState{display:none}}
