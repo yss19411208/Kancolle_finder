@@ -306,7 +306,8 @@ function renderResident() {
     el('td', { class: 'node' }, node, el('br'),
       el('button', { class: 'btn small danger', on: { click: () => { if (confirm(`${m}-${node} を削除しますか？`)) { readResidentTable(); delete S.resident[m][node]; markDirty('resident'); renderResident(); } } } }, '削除')),
     ...nodes[node].map((names, ti) => el('td', { class: 'c' + ti },
-      el('textarea', { rows: Math.max(2, Math.ceil(names.join('、').length / (ti === 4 ? 17 : 7))), value: names.join('、'), on: { input: () => markDirty('resident'), change: checkResidentNames } })))));
+      el('textarea', { rows: Math.max(2, Math.ceil(names.join('、').length / (ti === 4 ? 17 : 7))), value: names.join('、'), on: { input: () => markDirty('resident'), change: checkResidentNames } }),
+      residentLast(m, node, names)))));
   $('resTable').replaceChildren(el('thead', {}, head), el('tbody', {}, ...rows));
   $('resTable').dataset.map = m;
   checkResidentNames();
@@ -336,12 +337,21 @@ function renderAutoResident() {
     el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
     el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
     el('td', { class: 'num' }, `${Number(a.drops).toLocaleString()} / ${Number(a.n).toLocaleString()}`),
-    el('td', { class: 'num' + (a.last && Date.now() - parse(a.last + ':00') >= 72 * 3600e3 ? ' stale' : '') }, a.last || '—'),
+    lastCell(a.map, a.node, a.ship),
     evCell(a.ev, '記載なし'),
     el('td', {}, el('button', { class: 'btn small', on: { click: () => { off.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設(全月)から外す ${a.map}-${a.node} ${a.ship}`); renderAutoResident(); } } }, '常設から外す')))) : [el('tr', {}, el('td', { colSpan: 8 }, '該当なし'))]));
   $('autoOffTable').tBodies[0].replaceChildren(...(off.length ? off.map(e => el('tr', {},
-    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { off.splice(off.indexOf(e), 1); markDirty('config', `常設(全月)に戻す ${e.map}-${e.node} ${e.ship}`); renderAutoResident(); } } }, '常設に戻す')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
+    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), lastCell(e.map, e.node, e.ship),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { off.splice(off.indexOf(e), 1); markDirty('config', `常設(全月)に戻す ${e.map}-${e.node} ${e.ship}`); renderAutoResident(); } } }, '常設に戻す')))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
+}
+// 常駐の各艦の最終ドロップ。3 日以上出ていない / 記録がない艦だけを赤で出す (全部は多すぎるため)
+function residentLast(map, node, names) {
+  if (!names.length) return null;
+  const now = Date.now();
+  const old = names.map(n => [n, lastDrop(map, node, n)])
+    .filter(([, v]) => !v || now - parse(v[0] + ':00') >= 72 * 3600e3);
+  if (!old.length) return el('div', { class: 'res-last ok' }, '全艦 3 日以内に出ています');
+  return el('div', { class: 'res-last' }, ...old.map(([n, v]) => el('div', {}, `${n}: ${v ? v[0].slice(5) : '記録なし'}`)));
 }
 function readResidentTable() {
   const m = $('resTable').dataset.map;
@@ -454,20 +464,39 @@ function limitedEvents(map, node, ship) {
   const seen = new Set();
   const list = hits.filter(h => { const k = h.title + h.start + h.ended; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => (a.ended - b.ended) || (b.start || '').localeCompare(a.start || ''));
-  // 個別のイベント表に無い、昔から続いている限定: ページ先頭の「現在継続中」一覧と、出撃ドロップの青字
-  if (!list.some(e => !e.ended)) {
-    if (((page.blue || {})[map] || {})[node]?.some(n => norm(n) === nn)) list.unshift({ title: '出撃ドロップで青字（期間限定）', start: '', ended: false, note: true });
-    else if (((page.ongoing || {})[map] || []).some(n => norm(n) === nn)) list.unshift({ title: '限定ページ先頭の「現在継続中」一覧に記載（海域単位）', start: '', ended: false, note: true });
+  // 個別のイベント表に無い、昔から続いている限定: ページ先頭の「現在継続中」一覧 (出撃ドロップの青字は使わない)
+  if (!list.some(e => !e.ended) && ((page.ongoing || {})[map] || []).some(n => norm(n) === nn)) {
+    list.unshift({ title: '限定ページ先頭の「現在継続中」一覧に記載（海域単位）', start: '', ended: false, note: true });
   }
   return list;
 }
-const evLabel = e => e.note ? e.title : `${e.title} ${e.start}〜${e.end || ''}${e.status === '終了' ? '（終了済）' : e.ended ? '（この艦は終了）' : ''}`;
+const evLabel = e => e.note ? e.title : `${e.title} ${e.start}〜${e.end || ''}${e.status === '終了' ? '（終了済）' : e.ended ? '（この艦は終了）' : ''}${e.memo ? `（${e.memo}）` : ''}`;
 function evCell(list, emptyText) {
   if (!list.length) return el('td', { class: 'ev none' }, emptyText);
   const [first, ...rest] = list;
   return el('td', { class: 'ev' + (first.ended ? ' past' : '') },
     el('div', {}, evLabel(first)),
     rest.length ? el('div', { class: 'ev-more' }, `ほか ${rest.length} 件: ` + rest.map(evLabel).join(' / ')) : null);
+}
+
+// 最終ドロップ [日時, 回数] と、その表示用のセル (3 日以上前は赤字)
+function lastDrop(map, node, ship) {
+  const nodeMap = (((S.lastdrop || {}).maps || {})[map] || {})[node] || {};
+  let v = nodeMap[ship];
+  if (!v) {
+    const nn = norm(ship);
+    const hit = Object.entries(nodeMap).find(([k]) => norm(k) === nn);
+    v = hit && hit[1];
+  }
+  if (!v) return null;
+  return Array.isArray(v) ? v : [v, null];
+}
+function lastCell(map, node, ship) {
+  const v = lastDrop(map, node, ship);
+  if (!v) return el('td', { class: 'num none-cell' }, '記録なし');
+  const h = (Date.now() - parse(v[0] + ':00')) / 3600e3;
+  const ago = h < 48 ? `${Math.max(0, Math.round(h))}時間前` : `${Math.floor(h / 24)}日前`;
+  return el('td', { class: 'num' + (h >= 72 ? ' stale' : ''), title: v[1] === null ? '' : `保存している期間で ${Number(v[1]).toLocaleString()} 回` }, `${v[0]}（${ago}）`);
 }
 
 const same = (a, b) => a.map === b.map && a.node === b.node && norm(a.ship) === norm(b.ship);
@@ -481,12 +510,13 @@ function renderLimited() {
       el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
       el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
       el('td', { class: 'num' }, `${a.drops} / ${a.n}`),
+      lastCell(a.map, a.node, a.ship),
       evCell(limitedEvents(a.map, a.node, a.ship), '限定ページに記載なし'),
       el('td', {}, excluded ? el('span', { class: 'tag' }, '除外予定') : [
         el('button', { class: 'btn small', on: { click: () => { ex.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `限定から除外 ${a.map}-${a.node} ${a.ship}`); renderLimited(); } } }, '除外'), ' ',
         el('button', { class: 'btn small', on: { click: () => toResident(a) } }, '常駐へ')]));
   });
-  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 7 }, '該当なし'))]));
+  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 8 }, '該当なし'))]));
 
   // 1 隻報告で載せていないもの / 復元したもの
   const keepList = S.config.limited_keep;
@@ -494,18 +524,20 @@ function renderLimited() {
     .filter(a => !keepList.some(e => same(e, a)));
   $('singleTable').tBodies[0].replaceChildren(...(singles.length ? singles.map(a => el('tr', {},
     el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship), el('td', { class: 'num' }, Number(a.n).toLocaleString()),
-    el('td', {}, el('button', { class: 'btn small', on: { click: () => { keepList.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `1隻報告を復元 ${a.map}-${a.node} ${a.ship}`); renderLimited(); } } }, '復元')))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
+    lastCell(a.map, a.node, a.ship),
+    evCell(limitedEvents(a.map, a.node, a.ship), '記載なし'),
+    el('td', {}, el('button', { class: 'btn small', on: { click: () => { keepList.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `1隻報告を復元 ${a.map}-${a.node} ${a.ship}`); renderLimited(); } } }, '復元')))) : [el('tr', {}, el('td', { colSpan: 7 }, 'なし'))]));
   $('keepTable').tBodies[0].replaceChildren(...(keepList.length ? keepList.map(e => el('tr', {},
-    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { keepList.splice(keepList.indexOf(e), 1); markDirty('config', `復元を取り消し ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '取り消し')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
+    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), lastCell(e.map, e.node, e.ship),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { keepList.splice(keepList.indexOf(e), 1); markDirty('config', `復元を取り消し ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '取り消し')))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
 
   const man = S.config.limited_manual;
   $('manTable').tBodies[0].replaceChildren(...man.map(e => el('tr', {},
-    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), el('td', { class: 'num' }, e.added || ''),
+    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), el('td', { class: 'num' }, e.added || ''), lastCell(e.map, e.node, e.ship),
     el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { man.splice(man.indexOf(e), 1); markDirty('config', `手動の限定を削除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '削除')))));
   $('exTable').tBodies[0].replaceChildren(...(ex.length ? ex.map(e => el('tr', {},
-    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config', `除外を解除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '解除')))) : [el('tr', {}, el('td', { colSpan: 4 }, 'なし'))]));
+    el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), lastCell(e.map, e.node, e.ship),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config', `除外を解除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '解除')))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
 }
 function toResident(a) {
   readResidentTable();

@@ -66,7 +66,7 @@ HISTORY_DETAIL_MAX = 20
 LOG_KEEP = 40             # 管理画面に出す「データ更新の記録」の保持件数
 LOG_DETAIL_MAX = 15
 AUTO_RESIDENT_MIN_DAYS = 7    # 当月は記録が 7 日分たまるまで「全月で出ているか」の判定に含めない
-SINGLE_MIN_BATTLES = 10000   # 報告 1 件だけで、そのマスの戦闘数がこれ以上なら誤報告とみなして掲載しない  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
+SINGLE_MIN_BATTLES = 2000    # 報告 1 件だけで、そのマスの戦闘数がこれ以上なら誤報告とみなして掲載しない  # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
 
 
 def log(*a):
@@ -497,8 +497,8 @@ def build_drop_data(states, resident, cfg, ships, now):
     # 出撃ドロップに載っていなくても、保存している全ての月で 1 回以上出ている艦は常設として公開する。
     # ただし限定と分かっているもの (出撃ドロップの青字 / 限定ページで継続中) と、管理画面で外したものは除く。
     page = load_json(os.path.join(ROOT, "data", "limited_page.json"), {}) or {}
-    known_blue = {(m, node, norm_name(n)) for m, nodes in page.get("blue", {}).items()
-                  for node, names in nodes.items() for n in names}
+    # 出撃ドロップの青字は使わない。限定かどうかは期間限定ドロップのページだけで判断する
+    known_blue = set()
     known_ongoing = {(m, norm_name(n)) for m, names in page.get("ongoing", {}).items() for n in names}
     # 限定ページの各イベントで、取消線が付いていない (= 継続中の) 艦も限定として扱う
     for mp, nd, n, _ei, ended in page.get("entries", []):

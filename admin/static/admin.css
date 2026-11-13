@@ -125,3 +125,6 @@ td.ev.none{color:#9aa9ad}
 td.ev .ev-more{font-size:11px;color:var(--sub);font-weight:400}
 label.check{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--text);white-space:nowrap}
 .warnline{color:var(--lim);font-weight:700;margin:0 0 8px}
+td.none-cell{color:#9aa9ad}
+.res-last{font-size:11px;color:var(--ng);line-height:1.4;padding:2px 4px 0}
+.res-last.ok{color:var(--ok)}

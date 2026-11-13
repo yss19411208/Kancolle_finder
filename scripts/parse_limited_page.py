@@ -136,6 +136,18 @@ def parse_file(path):
 for path in sys.argv[1:]:
     parse_file(path)
 
+# Wiki にまだ載っていない分を手で足す (data/limited_extra.json)
+extra_path = os.path.join(ROOT, 'data', 'limited_extra.json')
+if os.path.exists(extra_path):
+    for x in json.load(open(extra_path, encoding='utf-8')).get('events', []):
+        idx = next((i for i, e in enumerate(events) if e['start'] == x['start']), None)
+        if idx is None:
+            idx = len(events)
+            events.append({"title": x['title'], "start": x['start'], "end": None, "status": "継続中"})
+        if x.get('memo'):
+            events[idx]['memo'] = x['memo']
+        for mp, node, n in x.get('entries', []):
+            entries.append([mp, node, n, idx, 0])
 entries = [list(x) for x in dict.fromkeys(tuple(e) for e in entries)]
 if not events:
     sys.exit("表を読み取れませんでした。期間限定ドロップのページを保存した HTML か確認してください")

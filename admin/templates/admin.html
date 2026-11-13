@@ -74,7 +74,7 @@
 <section id="tab-resident">
   <div class="card">
     <h2>常駐リスト</h2>
-    <p class="note">艦名は「、」区切りで入力します。ここに無い艦が poi で観測されると限定ドロップとして掲載されます。</p>
+    <p class="note">艦名は「、」区切りで入力します。各マスの下には、3 日以上ドロップしていない艦（または記録がない艦）と最終ドロップ日を赤で出します。ここに無い艦が poi で観測されると限定ドロップとして掲載されます。</p>
     <div class="row">
       <select id="resMap"></select>
       <button class="btn" id="resAddNode">マスを追加</button>
@@ -87,14 +87,14 @@
   </div>
   <div class="card">
     <h2>出撃ドロップに無いが、常設として公開しているもの</h2>
-    <p class="note">出撃ドロップ（Wiki）には載っていませんが、保存している<strong>すべての月</strong>で 1 回以上ドロップしているため、公開ページでは常設として載せています。<span id="autoMonths"></span>出撃ドロップの青字や、限定ページで継続中の艦（イベントの表で取消線が付いていない艦を含む）は対象外です。最終ドロップが 3 日以上前のものは赤字になります。「限定ページとの照合」は、艦これ攻略Wiki「期間限定ドロップイベント」に同じ海域・マス・艦が載っているかです。載っていれば、過去の限定ドロップがまだ続いているか、終わった限定の可能性があります。限定に戻したいものは「常設から外す」を押してください（その場で保存）。</p>
+    <p class="note">出撃ドロップ（Wiki）には載っていませんが、保存している<strong>すべての月</strong>で 1 回以上ドロップしているため、公開ページでは常設として載せています。<span id="autoMonths"></span>限定ページで継続中の艦（イベントの表で取消線が付いていない艦を含む）は対象外です。出撃ドロップの青字は使っていません。最終ドロップが 3 日以上前のものは赤字になります。「限定ページとの照合」は、艦これ攻略Wiki「期間限定ドロップイベント」に同じ海域・マス・艦が載っているかです。載っていれば、過去の限定ドロップがまだ続いているか、終わった限定の可能性があります。限定に戻したいものは「常設から外す」を押してください（その場で保存）。</p>
     <div class="row"><input type="text" id="autoResFilter" placeholder="絞り込み（海域・艦名）" class="grow">
       <label class="check"><input type="checkbox" id="autoResOnlyHit"> 限定ページに記載があるものだけ</label>
       <span id="autoResCount" class="note"></span></div>
     <p class="note warnline" id="autoResHit"></p>
     <div class="scroll tall"><table class="list" id="autoResTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>ドロップ数 / 戦闘数</th><th>最終ドロップ</th><th>限定ページとの照合</th><th></th></tr></thead><tbody></tbody></table></div>
     <h2 style="margin-top:16px">常設から外したもの</h2>
-    <table class="list" id="autoOffTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th></th></tr></thead><tbody></tbody></table>
+    <table class="list" id="autoOffTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
   </div>
   <div class="card">
     <h2>Wiki との差分を確認</h2>
@@ -109,14 +109,14 @@
     <h2>自動検出された限定ドロップ</h2>
     <p class="note">poi で観測され、常駐リストに無い艦です（公開中のデータ時点）。「限定ページのイベント」は、艦これ攻略Wiki「期間限定ドロップイベント」で同じ海域・マス・艦が載っているイベントです（継続中を先に、新しい順）。誤りなら「除外」、常駐なら「常駐へ」を押してください。「除外」はその場で保存され、数分後に公開ページへ反映されます。</p>
     <div class="row"><input type="text" id="limFilter" placeholder="絞り込み（海域・艦名）" class="grow"></div>
-    <div class="scroll tall"><table class="list" id="autoTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>報告</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll tall"><table class="list" id="autoTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>報告</th><th>最終ドロップ</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card">
-    <h2>1隻報告（掲載していないもの）</h2>
-    <p class="note">アップデート日時以降の報告が 1 件だけで、そのマスの戦闘が 10,000 回以上あるものです。誤報告の可能性が高いので公開ページには載せていません。本物なら「復元」を押すと掲載されます（その場で保存）。報告が 2 件以上になれば自動で掲載されます。</p>
-    <table class="list" id="singleTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>戦闘数</th><th></th></tr></thead><tbody></tbody></table>
+    <h2>⚠ 1隻報告（掲載していないもの）</h2>
+    <p class="note">アップデート日時以降の報告が 1 件だけで、そのマスの戦闘が 2,000 回以上あるものです。誤報告の可能性が高いので公開ページには載せていません。本物なら「復元」を押すと掲載されます（その場で保存）。報告が 2 件以上になれば自動で掲載されます。</p>
+    <table class="list" id="singleTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>戦闘数</th><th>最終ドロップ</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table>
     <h2 style="margin-top:16px">復元したもの</h2>
-    <table class="list" id="keepTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th></th></tr></thead><tbody></tbody></table>
+    <table class="list" id="keepTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
   </div>
   <div class="card">
     <h2>手動で追加した限定ドロップ</h2>
@@ -127,12 +127,12 @@
       <input type="text" id="manShip" placeholder="艦名" list="shipNames" class="grow">
       <button class="btn" id="manAdd">追加</button>
     </div>
-    <div class="scroll tall"><table class="list" id="manTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>追加日時</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll tall"><table class="list" id="manTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>追加日時</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table></div>
     <div class="row"><button class="btn danger" id="manClear">手動分をすべて削除</button></div>
   </div>
   <div class="card">
     <h2>除外リスト</h2>
-    <table class="list" id="exTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th></th></tr></thead><tbody></tbody></table>
+    <table class="list" id="exTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
