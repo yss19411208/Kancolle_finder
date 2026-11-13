@@ -12,6 +12,8 @@ on:
     paths:
       - admin_config.json
       - Normal_Drop_Ship.json
+      - scripts/update.py          # 集計のプログラムを直したときも、すぐ作り直す
+      - data/limited_page.json
 
 permissions:
   contents: write
