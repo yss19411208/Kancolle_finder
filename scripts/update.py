@@ -549,7 +549,7 @@ JUDGE_LABEL = {
     "added": "途中から出始め、定着",
     "new": "最近出始めた",
     "stopped": "出なくなった",
-    "intermittent": "断続的",
+    "intermittent": "途切れた期間あり・今は出ている",
     "misreport": "誤報告の疑い",
     "none": "期間内に出ていない",
 }
@@ -601,14 +601,19 @@ def judge_pairs(states, months, now):
         r = sum(c[first:last + 1]) / span_n
         lead = r * sum(n[:first])
         trail = r * sum(n[last + 1:])
+        # seg: 今続いている出方が始まった週 (途切れた期間の後、または出始め)。0 なら期間のはじめから
+        seg = first if lead >= GAP_EXPECT else 0
         gap, run = 0.0, 0.0
         for w in range(first, last + 1):
             if c[w]:
+                if run >= GAP_EXPECT:
+                    seg = w
                 gap, run = max(gap, run), 0.0
             else:
                 run += r * n[w]
         gap = max(gap, run)
-        if C <= 2 and N >= SINGLE_MIN_BATTLES:
+        # 誤報告: 出始めてから今までに戦闘が十分あるのに 2 件以下
+        if C <= 2 and sum(n[first:]) >= SINGLE_MIN_BATTLES:
             cls = "misreport"
         elif trail >= GAP_EXPECT:
             cls = "stopped"
@@ -618,17 +623,19 @@ def judge_pairs(states, months, now):
             cls = "added" if now - (w0 + first * WEEK) >= NEW_DAYS * DAY else "new"
         else:
             cls = "continuous"
-        rec.update(cls=cls, C=C, N=N, first=w0 + first * WEEK, last=w0 + (last + 1) * WEEK - 1, weeks=len(act))
+        rec.update(cls=cls, C=C, N=N, first=w0 + first * WEEK, last=w0 + (last + 1) * WEEK - 1, weeks=len(act),
+                   seg=(w0 + seg * WEEK) if seg else None)
     return out
 
 
 def build_drop_data(states, cfg, ships, now, wiki=None):
     """公開ページ用の Drop_Data.json と、管理画面用の判定一覧 (data/judge.json) を作る。
 
-    常設 = データで「全期間で出ている」か「途中から出始めて定着した」艦。
-           ただし期間限定ドロップのページで継続中になっている艦は、データに関係なく限定。
-           ページで終了済みの艦が、その後も出続けている場合は常設 (限定から常設になったもの)。
-    限定 = それ以外で、有効なアップデート日時以降に出ている艦。
+    限定 = 期間限定ドロップのページで継続中になっている艦 (アップデート日時以降に出ているもの)。
+    常設 = それ以外で、今も出続けている艦 (途中から出始めた艦・新艦・ドロップ表が変わった艦も含む)。
+           率は、今の出方が始まってから (途切れた期間の後) の分で出す。
+    載せない = 出なくなった艦 (常設から外れた・限定が終わった)、誤報告の疑い。
+    データだけで常設を限定にすることはしない。
     """
     name_of = {int(k): v["name"] for k, v in ships.items()}
     ti_of = {int(k): v["ti"] for k, v in ships.items()}
@@ -708,6 +715,35 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
     for (m, node), x in since_den.items():
         map_den_since[m] += x[0] + x[1]
 
+    # 今の出方が始まってから (seg 以降) の合計。途中から出始めた艦の率を薄めないため
+    hist_months = [mo for mo in months if mo in hist]
+
+    def seg_sum(m, node, sid, seg):
+        a = b = c1 = c2 = 0
+        for mo in hist_months:
+            if month_start(next_month(mo)) <= seg - DAY:
+                continue
+            for bk, (x, y) in states[mo]["dden"].get(m, {}).get(node, {}).items():
+                if int(bk) >= seg:
+                    a += x
+                    b += y
+            for bk, (x, y) in states[mo]["dsid"].get(m, {}).get(node, {}).get(str(sid), {}).items():
+                if int(bk) >= seg:
+                    c1 += x
+                    c2 += y
+        return a, b, c1, c2
+
+    _segmap = {}
+
+    def seg_map(m, seg):
+        if (m, seg) not in _segmap:
+            t = 0
+            for mo in hist_months:
+                for node, bks in states[mo]["dden"].get(m, {}).items():
+                    t += sum(x + y for bk, (x, y) in bks.items() if int(bk) >= seg)
+            _segmap[(m, seg)] = t
+        return _segmap[(m, seg)]
+
     maps, judge_rows = {}, []
     places = set(tot) | {(e["map"], e["node"]) for e in cfg["limited_manual"] if e.get("map") and e.get("node")}
     for m, node in sorted(places, key=lambda p: (map_key(p[0]), p[1])):
@@ -733,15 +769,24 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
                 pub, why = "常設", "manual"
             elif page == "ongoing":
                 pub, why = "限定", "page"
-            elif cls in ("continuous", "added") and k3 not in res_off:
+            elif k3 in res_off:
+                pub, why = "", "manual_off"
+            elif cls in ("continuous", "added", "new", "intermittent"):
                 pub, why = "常設", ("was_limited" if page == "ended" else cls)
             else:
-                pub, why = "限定", "auto"
+                pub, why = "", cls          # stopped / misreport / 記録なし: 載せない
             ds, do = since_sid.get((m, node, sid), (0, 0))
             if pub == "常設":
-                r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m, map_den_all[m])
+                seg = j.get("seg")
+                if seg:
+                    a, b, c1, c2 = seg_sum(m, node, sid, seg)
+                    r, d, n, basis = rate(c1, c2, a, b, m, seg_map(m, seg))
+                else:
+                    r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m, map_den_all[m])
                 rows.append([nm, ti_of.get(sid, 7), 0, r, d, n, basis, why])
                 seen.add(nn)
+            elif pub == "":
+                pass
             elif ds + do and k3 not in exclude:
                 ns, no = since_den.get((m, node), (0, 0))
                 if ds + do == 1 and ns + no >= SINGLE_MIN_BATTLES and k3 not in keep:
