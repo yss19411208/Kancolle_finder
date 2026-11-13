@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: write
+  actions: write             # 過去月の取り込みが残っていれば、自分を続けて起動するため
 
 concurrency:
   group: data-update
@@ -48,6 +49,7 @@ jobs:
       - run: pip install --quiet -r scripts/requirements.txt
 
       - name: ダンプを取得して集計
+        id: agg
         run: python scripts/update.py --state-dir state ${{ github.event_name == 'push' && '--smart' || '' }}
 
       - name: 結果を main にコミット
@@ -85,3 +87,10 @@ jobs:
           git commit --quiet -m "state $(TZ=Asia/Tokyo date '+%Y/%m/%d %H:%M')" || exit 0
           git push --quiet --force \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" state
+
+      # 過去月アーカイブの取り込みが残っていれば、すぐに次の実行を起動する (全部そろうまで自動で続く)
+      - name: 残りの過去月を続けて取り込む
+        if: steps.agg.outputs.pending == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run update.yml --repo "${{ github.repository }}" --ref main

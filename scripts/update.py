@@ -38,7 +38,7 @@ DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
 STATE_VERSION = 4
 HISTORY_MONTHS = 12       # 常設の判定に使う期間 (か月)。admin_config.json の history_months で変更できる
-ARCHIVE_PER_RUN = 4       # 1 回の実行で取り込む過去月の数 (毎朝 5 回起動するので 1 日で約 20 か月進む)
+ARCHIVE_PER_RUN = 6       # 1 回の実行で取り込む過去月の数。残りがあれば GitHub Actions が続けて自分を起動する
 DAY = 86400
 WEEK = 7 * DAY
 GAP_EXPECT = 8            # その期間に「8 回以上は出るはず」なのに 0 回なら、本当に出ていないとみなす (偶然 0 回の確率は約 0.03%)
@@ -99,28 +99,47 @@ def save_json(path, obj, compact=False):
         f.write("\n")
 
 
-def http_get(url, dest=None, timeout=120, tries=3):
-    last = None
+def http_get(url, dest=None, timeout=120, tries=8):
+    """URL を取得する。dest を渡すとファイルに保存し、途中で切れたら続きから取り直す (Range)。
+    Content-Length と受け取ったサイズが合うまで完了とみなさない。"""
+    ua = {"User-Agent": "Kancolle_finder-updater (+https://github.com/yss19411208/Kancolle_finder)"}
+    last, size, total = None, 0, None
+    if dest is not None:
+        open(dest, "wb").close()
     for i in range(tries):
         try:
-            req = urllib.request.Request(url, headers={
-                "User-Agent": "Kancolle_finder-updater (+https://github.com/yss19411208/Kancolle_finder)"})
-            with urllib.request.urlopen(req, timeout=timeout) as r:
+            headers = dict(ua)
+            if dest is not None and size:
+                headers["Range"] = f"bytes={size}-"
+            with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout) as r:
                 if dest is None:
                     return r.read()
-                size = 0
-                with open(dest, "wb") as f:
+                if size and r.status != 206:   # 続きから取れないサーバーなら最初から
+                    log("  続きからの取得に対応していないため、最初から取り直します")
+                    size = 0
+                    open(dest, "wb").close()
+                cl = r.headers.get("Content-Length")
+                if r.status == 206:
+                    cr = r.headers.get("Content-Range", "")
+                    if "/" in cr and cr.rsplit("/", 1)[1].isdigit():
+                        total = int(cr.rsplit("/", 1)[1])
+                elif cl and cl.isdigit():
+                    total = int(cl)
+                with open(dest, "ab") as f:
                     while True:
                         chunk = r.read(1 << 20)
                         if not chunk:
                             break
                         f.write(chunk)
                         size += len(chunk)
+            if total is None or size >= total:
                 return size
+            raise IOError(f"途中で切れました ({size / 1e6:.1f} / {total / 1e6:.1f} MB)")
         except Exception as e:  # noqa: BLE001
             last = e
-            log(f"  取得失敗 ({i + 1}/{tries}) {url}: {e}")
-            time.sleep(5 * (i + 1))
+            more = f"、{size / 1e6:.1f} MB まで受信済み・続きから再開" if dest is not None and size else ""
+            log(f"  取得失敗 ({i + 1}/{tries}) {url}: {e}{more}")
+            time.sleep(min(60, 5 * (i + 1)))
     raise RuntimeError(f"取得できませんでした: {url}: {last}")
 
 
@@ -1092,6 +1111,10 @@ def main():
                 notes.append(f"過去月は残り {len(todo) - ARCHIVE_PER_RUN} か月を次回以降に取り込みます")
                 log(f"過去月: 今回 {ARCHIVE_PER_RUN} か月、残り {len(todo) - ARCHIVE_PER_RUN} か月は次回以降")
                 todo = todo[:ARCHIVE_PER_RUN]
+                # 続きがあることを workflow に伝える (次の実行を自動で起動する)
+                if os.environ.get("GITHUB_OUTPUT"):
+                    with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+                        f.write("pending=1\n")
             for mo in todo:
                 url = archive_url("dropshiprecords", mo)
                 path = os.path.join(tmp, f"archive_{mo}.gz")
