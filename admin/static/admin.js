@@ -452,10 +452,16 @@ function limitedEvents(map, node, ship) {
     .filter(([m, n, s]) => m === map && (n === null || n === node) && norm(s) === nn)
     .map(([, , , ei, ended]) => ({ ...(ev[ei] || {}), ended: !!ended }));
   const seen = new Set();
-  return hits.filter(h => { const k = h.title + h.start + h.ended; if (seen.has(k)) return false; seen.add(k); return true; })
+  const list = hits.filter(h => { const k = h.title + h.start + h.ended; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => (a.ended - b.ended) || (b.start || '').localeCompare(a.start || ''));
+  // 個別のイベント表に無い、昔から続いている限定: ページ先頭の「現在継続中」一覧と、出撃ドロップの青字
+  if (!list.some(e => !e.ended)) {
+    if (((page.blue || {})[map] || {})[node]?.some(n => norm(n) === nn)) list.unshift({ title: '出撃ドロップで青字（期間限定）', start: '', ended: false, note: true });
+    else if (((page.ongoing || {})[map] || []).some(n => norm(n) === nn)) list.unshift({ title: '限定ページ先頭の「現在継続中」一覧に記載（海域単位）', start: '', ended: false, note: true });
+  }
+  return list;
 }
-const evLabel = e => `${e.title} ${e.start}〜${e.end || ''}${e.status === '終了' ? '（終了済）' : e.ended ? '（この艦は終了）' : ''}`;
+const evLabel = e => e.note ? e.title : `${e.title} ${e.start}〜${e.end || ''}${e.status === '終了' ? '（終了済）' : e.ended ? '（この艦は終了）' : ''}`;
 function evCell(list, emptyText) {
   if (!list.length) return el('td', { class: 'ev none' }, emptyText);
   const [first, ...rest] = list;
