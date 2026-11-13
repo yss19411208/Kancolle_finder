@@ -37,7 +37,7 @@ DT_FMT = "%Y/%m/%d %H:%M:%S"
 DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 # 過去月のアーカイブ。ファイル名は <種別>-<翌月1日0時(UTC)のUNIX時刻を16進>.gz
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
-STATE_VERSION = 6
+STATE_VERSION = 7
 HISTORY_MONTHS = 12       # 常設の判定に使う期間 (か月)。admin_config.json の history_months で変更できる
 ARCHIVE_PER_RUN = 6       # 1 回の実行で取り込む過去月の数。残りがあれば GitHub Actions が続けて自分を起動する
 DAY = 86400
@@ -320,7 +320,7 @@ def aggregate_drops(path, routes, cuts=()):
 
     state = {
       month, records, first, last, cuts, final,
-      tot:  {map: {node: {"b": bossか, "S": [戦闘数, {艦ID: 数}], "O": [..A/B勝利..]}}},
+      tot:  {map: {node: {"bn": isBossの記録数, "S": [戦闘数, {艦ID: 数}], "O": [..A/B勝利..]}}},
       dden: {map: {node: {区間の開始時刻: [S戦闘数, A/B戦闘数]}}},
       dsid: {map: {node: {艦ID: {区間の開始時刻: [S, A/B]}}}},     # 全艦
       lastdrop: {map: {node: {艦ID: 最後にドロップした時刻}}},
@@ -337,7 +337,7 @@ def aggregate_drops(path, routes, cuts=()):
     cnt = defaultdict(int)       # (month, mapId, cell, rank, sid) -> n
     dden = defaultdict(int)      # (month, mapId, cell, bucket, rank) -> n
     dsid = defaultdict(int)      # (month, mapId, cell, bucket, rank, sid) -> n
-    boss = set()
+    bosscnt = defaultdict(int)   # (month, mapId, cell) -> isBoss が付いた記録の数
     lastdrop = {}
     meta = {}
     total = used = 0
@@ -411,7 +411,7 @@ def aggregate_drops(path, routes, cuts=()):
             if ts > lastdrop.get(k, 0):
                 lastdrop[k] = ts
         if d.get("isBoss"):
-            boss.add((map_id, cell))
+            bosscnt[(mo, map_id, cell)] += 1
         m = meta.setdefault(mo, [0, ts, ts])
         m[0] += 1
         if ts < m[1]:
@@ -463,13 +463,16 @@ def aggregate_drops(path, routes, cuts=()):
         m, node = place(map_id, cell)
         if node.startswith("#"):
             unknown.add(f"{m}{node}")
-        t = out[mo]["tot"].setdefault(m, {}).setdefault(node, {"b": 0, "S": [0, {}], "O": [0, {}]})
-        if (map_id, cell) in boss:
-            t["b"] = 1
+        t = out[mo]["tot"].setdefault(m, {}).setdefault(node, {"bn": 0, "S": [0, {}], "O": [0, {}]})
         r = t["S" if rc == 0 else "O"]
         r[0] += n
         if sid:
             r[1][str(sid)] = r[1].get(str(sid), 0) + n
+    for (mo, map_id, cell), n in bosscnt.items():
+        m, node = place(map_id, cell)
+        t = out[mo]["tot"].get(m, {}).get(node)
+        if t is not None:
+            t["bn"] += n
     for (mo, map_id, cell, bk, rc), n in dden.items():
         m, node = place(map_id, cell)
         h = out[mo]["dden"].setdefault(m, {}).setdefault(node, {}).setdefault(str(bk), [0, 0])
@@ -1002,14 +1005,14 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         return None, 0, ns if mode == "node_s" else ns + no, ""
 
     # 常設の率: 判定期間の合計 / 限定の率: アップデート日時以降
-    tot = defaultdict(lambda: [0, 0, defaultdict(int), defaultdict(int), 0])   # (m,node) -> [nS, nO, dS, dO, boss]
+    tot = defaultdict(lambda: [0, 0, defaultdict(int), defaultdict(int), 0])   # (m,node) -> [nS, nO, dS, dO, bossの記録数]
     for mo in months:
         for m, nodes in states[mo]["tot"].items():
             for node, t in nodes.items():
                 x = tot[(m, node)]
-                x[4] |= t.get("b", 0)
                 if mo not in hist:
                     continue
+                x[4] += t.get("bn", 0)
                 x[0] += t["S"][0]
                 x[1] += t["O"][0]
                 for sid, n in t["S"][1].items():
@@ -1077,7 +1080,9 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
     for m, node in sorted(places, key=lambda p: (map_key(p[0]), p[1])):
         if node.startswith("#"):
             continue
-        nS, nO, dS, dO, boss = tot.get((m, node), [0, 0, {}, {}, 0])
+        nS, nO, dS, dO, bn = tot.get((m, node), [0, 0, {}, {}, 0])
+        # ボスマス: 記録の半分以上に isBoss が付いているマス (一部のツールが誤って付けることがあるため多数決)
+        boss = 1 if nS + nO and bn >= (nS + nO) * 0.5 else 0
         rows, seen = [], set()
         sids = {sid for (mm, nd, sid) in judged if mm == m and nd == node}
         sids |= {sid for (mm, nd, sid) in since_sid if mm == m and nd == node}
