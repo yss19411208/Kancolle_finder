@@ -787,5 +787,35 @@
     "notes": [
       "当月ダンプは取得済みのものを使用 (2026/11/13 08:47:34 取得)"
     ]
+  },
+  {
+    "at": "2026/11/13 09:40:08",
+    "trigger": "push",
+    "drop_records": 16281402,
+    "drop_added": 0,
+    "build_records": 134060,
+    "build_added": 0,
+    "data_to": "2026/11/13 01:02:40",
+    "months": [
+      "2026-09",
+      "2026-10",
+      "2026-11"
+    ],
+    "cutoff": "2026/11/11 18:00:00",
+    "limited": 154,
+    "resident": 10842,
+    "limited_added_n": 1,
+    "limited_removed_n": 0,
+    "resident_added_n": 0,
+    "resident_removed_n": 0,
+    "limited_added": [
+      "1-1-C 瑞穂"
+    ],
+    "limited_removed": [],
+    "resident_added": [],
+    "resident_removed": [],
+    "notes": [
+      "当月ダンプは取得済みのものを使用 (2026/11/13 08:47:34 取得)"
+    ]
   }
 ]
