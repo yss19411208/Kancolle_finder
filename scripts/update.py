@@ -788,14 +788,18 @@ def suspicious(j, node_orig):
         return ""          # 報告者の情報が無い (古い形式のデータ)
     if (C >= 3 and fp <= 1) or (C >= 20 and fp <= 3):
         return f"報告者が {fp} 人だけ ({C} 件)"
-    if C >= 5 and rp.get("hr", 0) >= C * 0.5:
-        return f"{rp['hr']} 件が同じ 1 時間に集中"
+    # 1 時間への集中: 報告者も少ないときだけ (新しい海域の公開直後などは、みんなが同じ時間に出撃するため)
+    if C >= 5 and rp.get("hr", 0) >= C * 0.5 and fp <= max(2, C // 3):
+        return f"{rp['hr']} 件が同じ 1 時間に集中 (報告者 {fp} 人)"
+    # ツールの偏り: そのマスでのツールの割合から見て、偶然では 0.1% 未満でしか起きない偏りのときだけ
     ok = rp.get("ok") or {}
     tot = sum(node_orig.values()) or 1
-    if C >= 10 and len(ok) == 1:
+    # (A/B 勝利のドロップは報告するツールが偏る (ほぼ poi だけ) ので、S 勝利のときだけ調べる)
+    if len(ok) == 1 and j.get("rank") == "S":
         tool = next(iter(ok))
-        if node_orig.get(tool, 0) / tot < 0.9:
-            return f"すべて {tool} からの報告"
+        share = node_orig.get(tool, 0) / tot
+        if share ** C < 0.001:
+            return f"{C} 件すべて {tool} からの報告 (ふだんの割合 {share * 100:.0f}%)"
     return ""
 
 
