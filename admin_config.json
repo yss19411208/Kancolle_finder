@@ -35,6 +35,12 @@
       "ship": "睦月"
     }
   ],
-  "limited_keep": [],
+  "limited_keep": [
+    {
+      "map": "1-1",
+      "node": "C",
+      "ship": "瑞穂"
+    }
+  ],
   "auto_resident_exclude": []
 }
