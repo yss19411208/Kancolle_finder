@@ -33,6 +33,12 @@ function paged(id, items, mk, opt = {}) {
     st.bar = el('div', { class: 'pager' }, prev, st.info, next);
     st.prev = prev; st.next = next;
     st.box.after(st.bar);
+    st.go = dir => {
+      if (dir > 0 && st.start + st.count < st.items.length) { st.stack.push(st.start); st.start += st.count; drawPage(id); return true; }
+      if (dir < 0 && st.stack.length) { st.start = st.stack.pop(); drawPage(id); return true; }
+      return false;
+    };
+    pageByScroll(st);
   }
   const key = opt.key === undefined ? null : opt.key;
   if (key !== st.key) { st.start = 0; st.stack = []; }
@@ -65,6 +71,34 @@ function drawPage(id) {
   st.prev.disabled = !st.stack.length;
   st.next.disabled = st.start + n >= total;
   st.bar.classList.toggle('single', st.start === 0 && n >= total);
+}
+// ホイール・スワイプでもページを送る (ボタンでも送れる)。
+// 中で縦にスクロールできる欄 (更新履歴など) は、端まで行ってからさらに回したときだけ送る
+function pageByScroll(st) {
+  const box = st.box;
+  let acc = 0, lock = 0;
+  const atEdge = dir => !box.classList.contains('free') ||
+    (dir > 0 ? box.scrollTop + box.clientHeight >= box.scrollHeight - 2 : box.scrollTop <= 0);
+  const turn = dir => {
+    const now = Date.now();
+    if (now < lock) return;
+    if (st.go(dir)) { lock = now + 350; if (box.classList.contains('free')) box.scrollTop = dir > 0 ? 0 : box.scrollHeight; }
+  };
+  box.addEventListener('wheel', e => {
+    const dir = Math.sign(e.deltaY);
+    if (!dir || !atEdge(dir)) { acc = 0; return; }
+    e.preventDefault();
+    acc += e.deltaMode === 1 ? e.deltaY * 30 : e.deltaY;   // 行単位のマウスにも合わせる
+    if (Math.abs(acc) >= 60) { turn(Math.sign(acc)); acc = 0; }
+  }, { passive: false });
+  let y0 = null;
+  box.addEventListener('touchstart', e => { y0 = e.touches[0].clientY; }, { passive: true });
+  box.addEventListener('touchend', e => {
+    if (y0 === null) return;
+    const dy = y0 - e.changedTouches[0].clientY;   // 上へスワイプ = 次へ
+    y0 = null;
+    if (Math.abs(dy) >= 50 && atEdge(Math.sign(dy))) turn(Math.sign(dy));
+  }, { passive: true });
 }
 function redrawVisible() { for (const id of Object.keys(PG)) if (PG[id].box.offsetParent !== null) drawPage(id); }
 // 狭い画面では、重要でない列 (m1: 1100px 未満 / m2: 760px 未満) を隠す。詳細には出る

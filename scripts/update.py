@@ -37,7 +37,7 @@ DT_FMT = "%Y/%m/%d %H:%M:%S"
 DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 # 過去月のアーカイブ。ファイル名は <種別>-<翌月1日0時(UTC)のUNIX時刻を16進>.gz
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
-STATE_VERSION = 5
+STATE_VERSION = 6
 HISTORY_MONTHS = 12       # 常設の判定に使う期間 (か月)。admin_config.json の history_months で変更できる
 ARCHIVE_PER_RUN = 6       # 1 回の実行で取り込む過去月の数。残りがあれば GitHub Actions が続けて自分を起動する
 DAY = 86400
@@ -487,8 +487,14 @@ def aggregate_drops(path, routes, cuts=()):
         if n <= 0 or (mo, map_id, cell, sid) not in alive:
             continue
         m, node = place(map_id, cell)
-        out[mo]["rep"].setdefault(m, {}).setdefault(node, {})[str(sid)] = [
-            sorted(fps), dict(oks), max(hrs.values()) if hrs else 0]
+        # 同じマス名に複数のセル番号がある海域 (ルート違い) は足し合わせる
+        cur = out[mo]["rep"].setdefault(m, {}).setdefault(node, {}).get(str(sid))
+        if cur is None:
+            cur = out[mo]["rep"][m][node][str(sid)] = [[], {}, 0]
+        cur[0] = sorted(set(cur[0]) | fps)[:REP_KEEP]
+        for ok, v in oks.items():
+            cur[1][ok] = cur[1].get(ok, 0) + v
+        cur[2] = max(cur[2], max(hrs.values()) if hrs else 0)
     for (mo, map_id, cell, ok), n in orig.items():
         m, node = place(map_id, cell)
         o = out[mo]["orig"].setdefault(m, {}).setdefault(node, {})
@@ -780,7 +786,7 @@ def suspicious(j, node_orig):
     fp = rp.get("fp", 0)
     if not fp:
         return ""          # 報告者の情報が無い (古い形式のデータ)
-    if fp < REP_KEEP and fp <= max(1, C // 5):
+    if (C >= 3 and fp <= 1) or (C >= 20 and fp <= 3):
         return f"報告者が {fp} 人だけ ({C} 件)"
     if C >= 5 and rp.get("hr", 0) >= C * 0.5:
         return f"{rp['hr']} 件が同じ 1 時間に集中"
