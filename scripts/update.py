@@ -50,7 +50,7 @@ SOURCES = [
      "use": "ドロップ率・常設/限定の判定・建造レシピ"},
     {"name": "艦これ攻略Wiki 期間限定ドロップイベント", "url": "https://wikiwiki.jp/kancolle/%E6%9C%9F%E9%96%93%E9%99%90%E5%AE%9A%E3%83%89%E3%83%AD%E3%83%83%E3%83%97%E3%82%A4%E3%83%99%E3%83%B3%E3%83%88",
      "use": "限定ドロップの確認"},
-    {"name": "api_start2 (Tibowl)", "url": "https://github.com/Tibowl/api_start2", "use": "艦ID→艦名・艦種"},
+    {"name": "api_start2 (Tibowl)", "url": "https://github.com/Tibowl/api_start2", "use": "艦ID→艦名・艦種・レア度 (api_backs)"},
     {"name": "poi 海域データ (fcd/map.json)", "url": "https://github.com/poooi/poi", "use": "セルID→マス名"},
     {"name": "KC3改 edges.json", "url": "https://github.com/KC3Kai/KC3Kai", "use": "セルID→マス名の補完"},
 ]
