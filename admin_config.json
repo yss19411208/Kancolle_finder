@@ -23,6 +23,11 @@
       "map": "5-3",
       "node": "Q",
       "ship": "長良"
+    },
+    {
+      "map": "5-6",
+      "node": "Z",
+      "ship": "睦月"
     }
   ],
   "limited_keep": [],
