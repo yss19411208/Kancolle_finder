@@ -455,7 +455,7 @@ function limitedEvents(map, node, ship) {
   return hits.filter(h => { const k = h.title + h.start + h.ended; if (seen.has(k)) return false; seen.add(k); return true; })
     .sort((a, b) => (a.ended - b.ended) || (b.start || '').localeCompare(a.start || ''));
 }
-const evLabel = e => `${e.title} ${e.start}〜${e.ended ? '（この艦は終了）' : ''}`;
+const evLabel = e => `${e.title} ${e.start}〜${e.end || ''}${e.status === '終了' ? '（終了済）' : e.ended ? '（この艦は終了）' : ''}`;
 function evCell(list, emptyText) {
   if (!list.length) return el('td', { class: 'ev none' }, emptyText);
   const [first, ...rest] = list;
