@@ -201,6 +201,7 @@ def refresh_masters(offline=False):
                         "name": s["api_name"],
                         "ti": STYPE_TI.get(s.get("api_stype"), 7),
                         "base": 1 if s.get("api_sortno") or s.get("api_sort_id") else 0,
+                        "backs": s.get("api_backs") or 0,     # 背景の色 = レア度 (1〜8)
                     }
                 if len(new) > 300:
                     if new != ships:
@@ -803,6 +804,22 @@ def suspicious(j, node_orig):
     return ""
 
 
+def rarity_level(backs):
+    """api_backs をレア度の 3 段階にする: 1〜3 → 1 (コモン)、4〜5 → 2 (レア)、6〜8 → 3 (スーパーレア)。"""
+    b = int(backs or 0)
+    return 1 if 1 <= b <= 3 else 2 if b in (4, 5) else 3 if b >= 6 else 0
+
+
+def rarity_of_names(ships, maps):
+    """公開ページに出る艦名 -> レア度。同じ名前の艦が複数あるときは、改造前 (ID が小さい方) を使う。"""
+    by_name = {}
+    for k in sorted(ships, key=int):
+        v = ships[k]
+        by_name.setdefault(v["name"], rarity_level(v.get("backs")))
+    names = {r[0] for nodes in maps.values() for v in nodes.values() for r in v["ships"]}
+    return {n: by_name[n] for n in sorted(names) if by_name.get(n)}
+
+
 def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, node_battles):
     """公開ページでの扱いの理由を、管理画面に出す文章にする (公開していないものは必ず理由を書く)。"""
     C, N = j.get("C", 0), j.get("N", 0)
@@ -1178,6 +1195,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         "limited_months": [mo for mo in months if cutoff is not None and mo >= month_of(cutoff)] or hist,
         "rate_mode": mode,
         "sources": SOURCES,
+        # レア度 (api_backs): 1 = コモン (1〜3) / 2 = レア (4〜5) / 3 = スーパーレア (6〜8)
+        "rarity": rarity_of_names(ships, maps),
         "single_hidden": single,
         "types": TYPE_LABELS,
         "columns": ["name", "type", "limited", "rate", "drops", "battles", "basis", "source"],

@@ -483,13 +483,13 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 /* ---- 絞り込みの帯 ---- */
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; padding-top: 10px; border-top: 1px solid var(--border); }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
-.seg .src-btn, .seg .sort-btn {
+.seg .src-btn, .seg .sort-btn, .seg .rar-btn {
   border: none; border-right: 1px solid var(--border); border-radius: 0; background: #fff; color: var(--text-sub);
   padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
 }
 .seg button:last-child { border-right: none; }
 .seg button:hover { background: var(--blue-light); }
-.seg .src-btn.active, .seg .sort-btn.active { background: var(--navy2); color: #fff; }
+.seg .src-btn.active, .seg .sort-btn.active, .seg .rar-btn.active { background: var(--navy2); color: #fff; }
 .seg .src-btn.lim.active { background: var(--limited); }
 .ghost-btn { margin-left: auto; border: 1px solid var(--border); background: #fff; color: var(--navy); border-radius: 6px; padding: 7px 14px; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .ghost-btn:hover { background: var(--blue-light); }
@@ -552,6 +552,12 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 .tile:hover { background: var(--blue-light); border-color: var(--navy2); border-left-color: var(--navy2); }
 .tile .ship-name { min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile .drop-rate { margin-left: 0; font-size: 14px; color: var(--blue); }
+/* レア度 (api_backs): C = コモン、R = レア、SR = スーパーレア */
+.rar { display: inline-block; font-style: normal; font-size: 10.5px; font-weight: 700; line-height: 1; padding: 2px 4px; margin-right: 5px; border-radius: 3px; vertical-align: 1px; letter-spacing: 0; }
+.rar.r1 { background: #e7ecee; color: #5a6b72; border: 1px solid #c8d3d7; }
+.rar.r2 { background: #e3eefb; color: #1d5fa8; border: 1px solid #a9c6ea; }
+.rar.r3 { background: linear-gradient(135deg, #fff3c4, #f1cf6a); color: #7a5300; border: 1px solid #d9ae3d; }
+.rar-btn .rar { margin-right: 4px; }
 .tile.lim { border-left-color: var(--limited); background: var(--limited-bg); border-color: var(--limited-bd); }
 .tile.lim .ship-name, .tile.lim .drop-rate { color: var(--limited); }
 .tile.lim:hover { background: #fbe2d8; }
@@ -662,6 +668,12 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
         <button class="src-btn"        data-src="normal"  onclick="setMapSrc(this,'normal')">通常のみ</button>
         <button class="src-btn lim"    data-src="limited" onclick="setMapSrc(this,'limited')">限定のみ</button>
       </div>
+      <div class="seg" role="group" aria-label="レア度">
+        <button class="rar-btn active" onclick="setMapRar(this,0)">全レア度</button>
+        <button class="rar-btn"        onclick="setMapRar(this,1)"><i class="rar r1">C</i>コモン</button>
+        <button class="rar-btn"        onclick="setMapRar(this,2)"><i class="rar r2">R</i>レア</button>
+        <button class="rar-btn"        onclick="setMapRar(this,3)"><i class="rar r3">SR</i>スーパーレア</button>
+      </div>
       <div class="seg" role="group" aria-label="並び順">
         <button class="sort-btn active" onclick="setMapSort(this,'rate')">率が高い順</button>
         <button class="sort-btn"        onclick="setMapSort(this,'name')">艦名順</button>
@@ -748,6 +760,13 @@ let DROP_INFO = {};
 
 let currentWorld   = 'all';
 let currentMapSrc  = 'all';
+let currentMapRar  = 0;    // 0 = すべて、1 = コモン、2 = レア、3 = スーパーレア
+let RARITY = {};           // RARITY[艦名] = 1〜3 (api_backs から)
+const RAR_LABEL = { 1: ['C', 'コモン'], 2: ['R', 'レア'], 3: ['SR', 'スーパーレア'] };
+function rarBadge(ship) {
+  const r = RARITY[ship];
+  return r ? `<i class="rar r${r}" title="${RAR_LABEL[r][1]}">${RAR_LABEL[r][0]}</i>` : '';
+}
 let currentShipSrc = 'all';
 let buildSort      = {};
 let modalShip      = '';
@@ -760,6 +779,7 @@ let searchTimer    = null;
 // Drop_Data.json: maps[map][node] = {boss, n, ships:[[艦名, 艦種, 限定(0/1), 率%, ドロップ数, 戦闘数, 基準, 出所]]}
 function ingestDrop(data) {
   DROP_INFO = data || {};
+  RARITY = DROP_INFO.rarity || {};
   for (const [map, nodes] of Object.entries(DROP_INFO.maps || {})) {
     mapData[map] = {}; nodeMeta[map] = {};
     for (const [node, v] of Object.entries(nodes)) {
@@ -974,6 +994,13 @@ function setMapSrc(btn, src) {
   showMap();
 }
 
+function setMapRar(btn, r) {
+  currentMapRar = r;
+  document.querySelectorAll('#mapArea .rar-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  showMap();
+}
+
 function setMapSort(btn, sort) {
   mapSort = sort;
   document.querySelectorAll('#mapArea .sort-btn').forEach(b => b.classList.remove('active'));
@@ -999,6 +1026,7 @@ function showMap() {
   for (const node of Object.keys(mapData[map]).sort(nodeCmp)) {
     const all = mapData[map][node];
     const entries = all.filter(e => {
+      if (currentMapRar && RARITY[e.ship] !== currentMapRar) return false;
       if (currentMapSrc === 'normal')  return e.normal  === true && e.limited !== true;
       if (currentMapSrc === 'limited') return e.limited === true;
       return true;
@@ -1026,13 +1054,13 @@ function showMap() {
       for (const e of byType[ti].sort(cmp)) {
         const rt = rateText(e);
         html += `<button class="tile${e.limited === true ? ' lim' : ''}" onclick="openModal('${esc(e.ship)}')" title="${rateTitle(e)}">`
-          + `<span class="ship-name">${e.ship}</span><span class="drop-rate${rt ? '' : ' none'}">${rt || '—'}</span></button>`;
+          + `<span class="ship-name">${rarBadge(e.ship)}${e.ship}</span><span class="drop-rate${rt ? '' : ' none'}">${rt || '—'}</span></button>`;
       }
       html += `</div></div>`;
     }
     html += `</div>`;
   }
-  if (!shown) html += `<div class="no-data">${currentMapSrc === 'limited' ? 'この海域に限定ドロップはありません' : '該当するドロップはありません'}</div>`;
+  if (!shown) html += `<div class="no-data">${currentMapSrc === 'limited' && !currentMapRar ? 'この海域に限定ドロップはありません' : '該当するドロップはありません'}</div>`;
   html += '</div>';
   $('result').innerHTML = html;
   $('result').dataset.map = map;
