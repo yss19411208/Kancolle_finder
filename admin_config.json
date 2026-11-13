@@ -42,5 +42,7 @@
       "ship": "瑞穂"
     }
   ],
-  "auto_resident_exclude": []
+  "auto_resident_exclude": [],
+  "resident_force": [],
+  "history_months": 36
 }
