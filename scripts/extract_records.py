@@ -98,6 +98,9 @@ def main():
         normal = defaultdict(list)      # (map,node) -> 普通の記録 (無作為に数件)
         rnd = random.Random(1)
         total = 0
+        quest_of = defaultdict(Counter)   # mapId -> Counter(quest)
+        fields = Counter()                # (origin の種類, 欠けている項目)
+        by_rank = defaultdict(Counter)    # (map,node,rank) -> Counter(sid)
         for d in U.iter_archive_docs(path):
             if "mapId" not in d or "_id" not in d:
                 continue
@@ -113,6 +116,13 @@ def main():
                 continue
             total += 1
             key = (m, node)
+            quest_of[map_id][d.get("quest")] += 1
+            okind = str(d.get("origin")).split("/")[0]
+            for f in ("quest", "baseExp", "teitokuId", "enemy", "enemyShips1"):
+                if f not in d:
+                    fields[(okind, f)] += 1
+            fields[(okind, "_件数")] += 1
+            by_rank[(m, node, d.get("rank"))][sid] += 1
             fl = tuple(d.get("enemyShips1") or [])
             fleet[key][fl] += 1
             origin[key][str(d.get("origin"))] += 1
@@ -141,6 +151,8 @@ def main():
                 for sid, c in cnt.items():
                     if c <= 2 and c / tot < 0.0001:
                         chosen.add((m, node, sid))
+            if len(chosen) > 300:     # 多すぎるときは無作為に 300 組
+                chosen = set(rnd.sample(sorted(chosen), 300))
             keep = {k: v for k, v in keep.items() if k in chosen}
             U.log(f"自動で選んだ珍しい艦: {len(keep)} 組")
 
@@ -155,6 +167,9 @@ def main():
                 "_艦名": name_of.get(int(d.get("shipId") or 0), "ドロップなし" if not d.get("shipId") else "?"),
                 "_この敵編成がこのマスで出た割合": round(fc[fl] / max(1, sum(fc.values())) * 100, 4),
                 "_このマスで最も多い敵編成": list(fc.most_common(1)[0][0]) if fc else None,
+                "_この海域でふつうの海域名(quest)": quest_of[int(d["mapId"])].most_common(1)[0][0],
+                "_同じマス・同じ勝利ランクでのこの艦の件数": by_rank[(m, node, d.get("rank"))][int(d.get("shipId") or 0)],
+                "_同じマス・同じ勝利ランクのドロップ数": sum(c for k, c in by_rank[(m, node, d.get("rank"))].items() if k > 0),
                 **jsonable(d),
             }
 
@@ -178,6 +193,23 @@ def main():
                 "ツール名": origin[(m, node)].most_common(),
             } for m, node in sorted(places)
         }
+
+    # 全体: ツールごとに欠けている項目の件数
+    summary["_全体_ツールごとの欠けている項目"] = {
+        ok: {f: fields[(ok, f)] for f in ("_件数", "quest", "baseExp", "teitokuId", "enemy", "enemyShips1")}
+        for ok in sorted({k[0] for k in fields})}
+    # 記録ごとの判定材料の集計 (取り出した記録について)
+    chk = Counter()
+    for r in records:
+        chk["記録"] += 1
+        chk["敵編成がそのマスで0.1%未満"] += r["_この敵編成がこのマスで出た割合"] < 0.1
+        chk["questが無い・違う"] += r.get("quest") != r["_この海域でふつうの海域名(quest)"]
+        chk["S勝利"] += r.get("rank") == "S"
+        chk["A勝利"] += r.get("rank") == "A"
+        chk["B勝利"] += r.get("rank") == "B"
+        chk["同じランクでは0.1%以上"] += (r["_同じマス・同じ勝利ランクでのこの艦の件数"]
+                                    / max(1, r["_同じマス・同じ勝利ランクのドロップ数"]) >= 0.001)
+    summary["_取り出した記録の内訳"] = dict(chk)
 
     os.makedirs(args.out, exist_ok=True)
     for fn, obj in (("records.json", records), ("normal.json", out_normal), ("summary.json", summary)):
