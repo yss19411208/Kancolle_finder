@@ -18,11 +18,6 @@
   "auto_resident_exclude": [
     {
       "map": "1-4",
-      "node": "D",
-      "ship": "朧"
-    },
-    {
-      "map": "1-4",
       "node": "B",
       "ship": "朧"
     }
