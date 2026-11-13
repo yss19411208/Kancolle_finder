@@ -15,11 +15,6 @@
   ],
   "limited_exclude": [
     {
-      "map": "3-1",
-      "node": "G",
-      "ship": "天霧"
-    },
-    {
       "map": "5-3",
       "node": "Q",
       "ship": "長良"
