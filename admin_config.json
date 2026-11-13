@@ -23,6 +23,11 @@
       "map": "2-3",
       "node": "A",
       "ship": "朧"
+    },
+    {
+      "map": "3-1",
+      "node": "G",
+      "ship": "天霧"
     }
   ],
   "limited_keep": [],
