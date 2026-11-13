@@ -364,10 +364,18 @@ function drawLastDrop() {
     const ago = h < 48 ? `${Math.max(0, Math.round(h))}時間前` : `${Math.floor(h / 24)}日前`;
     return el('tr', {},
       el('td', {}, r.ship), el('td', {}, r.map), el('td', {}, r.node),
-      el('td', {}, el('span', { class: 'tag ' + label[r.kind][1] }, label[r.kind][0])),
+      ldReasonCell(r, label),
       el('td', { class: 'num' }, r.at), el('td', { class: 'num' }, ago),
       el('td', { class: 'num' }, r.count === null ? '' : Number(r.count).toLocaleString()));
   }, { key: [q, k, sort].join('|'), empty: '該当なし' });
+}
+
+// 区分の欄: 公開していないものは理由も出す (常設の判定の理由と同じ)
+function ldReasonCell(r, label) {
+  const j = r.kind !== 'normal' && r.kind !== 'limited'
+    ? jgRows.find(x => x.map === r.map && x.node === r.node && norm(x.ship) === norm(r.ship)) : null;
+  const why = j && j.reason ? j.reason : '';
+  return el('td', { title: why }, el('span', { class: 'tag ' + label[r.kind][1] }, label[r.kind][0]), why ? el('div', { class: 'sub reason' }, why) : null);
 }
 
 async function loadRuns() {
@@ -509,8 +517,8 @@ function drawJudge() {
     return el('tr', {},
       el('td', {}, r.map), el('td', {}, r.node), el('td', {}, r.ship),
       el('td', {}, el('span', { class: 'tag ' + (JG_CLASS[r.class] || '') }, labels[r.class] || r.class || '—'), r.rank ? el('div', { class: 'sub' }, r.rank === 'S' ? 'S勝利' : 'A/B勝利') : null),
-      el('td', {}, r.published ? el('span', { class: 'tag ' + (r.published === '常設' ? '' : r.published === '限定' ? 'wait' : 'ng') }, r.published) : '—',
-        why ? el('div', { class: 'sub' }, why) : null),
+      el('td', { title: r.reason || '' }, el('span', { class: 'tag ' + (r.published === '常設' ? '' : r.published === '限定' ? 'wait' : 'ng') }, r.published || '非公開'),
+        r.reason ? el('div', { class: 'sub reason' }, r.reason) : (why ? el('div', { class: 'sub' }, why) : null)),
       el('td', { class: 'num' }, `${Number(r.drops).toLocaleString()} / ${Number(r.battles).toLocaleString()}`),
       el('td', { class: 'num' }, r.first || '—'),
       lastCell(r.map, r.node, r.ship),

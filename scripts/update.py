@@ -803,6 +803,58 @@ def suspicious(j, node_orig):
     return ""
 
 
+def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, node_battles):
+    """公開ページでの扱いの理由を、管理画面に出す文章にする (公開していないものは必ず理由を書く)。"""
+    C, N = j.get("C", 0), j.get("N", 0)
+    cut = fmt_dt(cutoff)[:16] if cutoff is not None else "なし"
+    change = nt.get("change", "")
+    last = fmt_dt(j["last"])[:10] if j else ""
+    if pub == "常設":
+        return {
+            "manual": "手動で「常設にする」にしている",
+            "continuous": "判定期間のはじめから今まで出続けている",
+            "added": f"途中から出始め、60 日以上出続けている（{change}）" if change else "途中から出始め、60 日以上出続けている",
+            "new": f"出始めて 60 日未満だが、最新のアップデート（{cut}）後にも出ている（{change}）",
+            "intermittent": f"途中で出ない期間があったが、今は出ている（{change}）",
+            "was_limited": "限定ページでは終了済みだが、その後も出続けている",
+        }.get(why, "今も出ている")
+    if pub == "限定":
+        if why == "manual_lim":
+            return f"手動で「限定にする」にしている。最新のアップデート（{cut}）以降に {since_drops} 件"
+        return f"限定ページで継続中。最新のアップデート（{cut}）以降に {since_drops} 件出ている"
+    if pub == "1隻報告":
+        return (f"最新のアップデート（{cut}）以降の報告が 1 件だけで、その間にこのマスの戦闘が "
+                f"{since_battles:,} 回ある（{SINGLE_MIN_BATTLES:,} 回以上で 1 件だけのものは載せない）")
+    if pub == "除外":
+        return "除外リストに入れている"
+    # ---- 公開していないもの
+    if why == "page":
+        return f"限定ページで継続中だが、最新のアップデート（{cut}）以降は 1 回も出ていない"
+    if why == "manual_off":
+        return "手動で「常設から外す」にしている"
+    few = (f"このマスの戦闘が判定期間に {node_battles:,} 回しかない（{MIN_NODE_BATTLES} 回未満）。"
+           "戦闘の無いマスに紛れ込んだ記録の可能性が高い")
+    if why == "suspect":
+        return f"報告が偏っている: {sus}（誤報告・いたずらの疑い）" + (f"。また、{few}" if cls == "fewnode" else "")
+    if why == "fewnode" or cls == "fewnode":
+        return few
+    if why == "hold":
+        return "この海域で今まで一度も出たことがない艦が出始めた。「常設にする」か「限定にする」を押すまで載せない"
+    if why == "unconfirmed":
+        if C <= 2 and cls == "new":
+            return f"出始めたばかりで {C} 件しかなく、誤報告と見分けられない（3 件以上になったら判定する）"
+        return (f"出始めて（または再開して）60 日未満で、最新のアップデート（{cut}）以降に出ていない。"
+                "終わったばかりの限定の可能性があるため、アップデート後に出るのを確かめるまで載せない")
+    if cls == "stopped" or why == "stopped":
+        return f"最近は出ていない（{change or f'最終ドロップ {last}'}）。常設から外れたか、限定が終わったとみなした"
+    if cls == "misreport" or why == "misreport":
+        return (f"判定期間にこのマスで戦闘 {N:,} 回あるのに {C} 件しか出ていない"
+                f"（出始めてから {SINGLE_MIN_BATTLES:,} 回以上戦闘があって 2 件以下は誤報告の疑い）")
+    if cls == "none" or why == "none":
+        return "Wiki の出撃ドロップには載っているが、判定期間に 1 回も出ていない"
+    return "理由不明（管理者に知らせてください）"
+
+
 def change_notes(judged, cfg, now, on_node, on_map):
     """出始め・出なくなった日を、メンテナンスの日に合わせて文章にする。限定の可能性も付ける。
 
@@ -1082,10 +1134,12 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
                 pub = "除外" if k3 in exclude else ""
             if j or pub:
                 nt = notes.get((m, node, sid), {})
+                ns, no = since_den.get((m, node), (0, 0))
+                reason = reason_text(pub, why, cls, j, nt, sus, ds + do, ns + no, cutoff, nS + nO)
                 judge_rows.append([m, node, nm, cls, j.get("C", 0), j.get("N", 0),
                                    fmt_dt(j["first"])[:10] if j else "", fmt_dt(min(j["last"], now))[:10] if j else "",
                                    int(k3 in wiki_set), page, pub, why,
-                                   j.get("rank", ""), nt.get("change", ""), nt.get("lim", ""), sus])
+                                   j.get("rank", ""), nt.get("change", ""), nt.get("lim", ""), sus, reason])
         # 手動で追加した限定 (追加日時が基準日時より前のものは自動的に外れる)
         for e in cfg["limited_manual"]:
             if e.get("map") != m or e.get("node") != node or not e.get("ship"):
@@ -1105,7 +1159,9 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         if (m, node) in tot:
             nm = next((n for col in wiki[m][node] for n in col if norm_name(n) == nn), nn)
             x = tot[(m, node)]
-            judge_rows.append([m, node, nm, "none", 0, x[0] + x[1], "", "", 1, "", "", "", "", "", "", ""])
+            judge_rows.append([m, node, nm, "none", 0, x[0] + x[1], "", "", 1, "", "", "none", "", "", "", "",
+                               f"Wiki の出撃ドロップには載っているが、判定期間（{hist[0]}〜{hist[-1]}）の"
+                               f"戦闘 {x[0] + x[1]:,} 回で 1 回も出ていない"])
 
     rejected = sum(v for mo in hist for nodes in states[mo].get("rej", {}).values()
                    for rs in nodes.values() for v in rs.values())
@@ -1132,7 +1188,7 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         "months": hist,
         "labels": JUDGE_LABEL,
         "columns": ["map", "node", "ship", "class", "drops", "battles", "first", "last", "wiki", "page", "published", "why",
-                    "rank", "change", "lim", "suspect"],
+                    "rank", "change", "lim", "suspect", "reason"],
         "rows": judge_rows,
     }
     return data, judge

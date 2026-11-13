@@ -221,3 +221,4 @@ details.help .note{max-width:none}
 [hidden]{display:none!important}
 header .title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 @media(max-width:640px){header{gap:8px;padding:0 10px}header .title{font-size:15px;letter-spacing:.04em}#saveState{display:none}}
+#drawer dd .reason{display:block;margin:4px 0 0;font-size:13px;color:var(--text)}
