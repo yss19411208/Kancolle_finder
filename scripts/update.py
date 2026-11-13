@@ -37,7 +37,7 @@ DT_FMT = "%Y/%m/%d %H:%M:%S"
 DUMP_BASE = os.environ.get("POI_DUMP_BASE", "https://api.poi.moe/dump/")
 # 過去月のアーカイブ。ファイル名は <種別>-<翌月1日0時(UTC)のUNIX時刻を16進>.gz
 ARCHIVE_BASE = os.environ.get("POI_ARCHIVE_BASE", "https://db.poi.moe/")
-STATE_VERSION = 4
+STATE_VERSION = 5
 HISTORY_MONTHS = 12       # 常設の判定に使う期間 (か月)。admin_config.json の history_months で変更できる
 ARCHIVE_PER_RUN = 6       # 1 回の実行で取り込む過去月の数。残りがあれば GitHub Actions が続けて自分を起動する
 DAY = 86400
@@ -70,6 +70,9 @@ BUILD_TOP_SECRETARY = 12
 HISTORY_DETAIL_MAX = 20
 LOG_KEEP = 40             # 管理画面に出す「データ更新の記録」の保持件数
 LOG_DETAIL_MAX = 15       # 更新履歴に個別に書く件数の上限 (超えたら件数だけ)
+FLEET_HOLD = 50           # 敵編成の確認: この回数以下しか出ていない編成は、記録を後で取り消せるよう控えておく
+FLEET_MIN_SHARE = 0.001  # その月のマスの戦闘の 0.1% 未満しか出ない敵編成 (かつ FLEET_HOLD 回以下) の記録は誤記録として捨てる
+REP_KEEP = 30             # 艦ごとに控える報告者の数の上限
 MIN_NODE_BATTLES = 100   # 判定期間の戦闘がこれ未満のマスは載せない (戦闘の無いマスの誤った記録など)
 SINGLE_MIN_BATTLES = 2000    # 報告 1 件だけで、そのマスの戦闘数がこれ以上なら誤報告とみなして掲載しない
 
@@ -319,8 +322,13 @@ def aggregate_drops(path, routes, cuts=()):
       tot:  {map: {node: {"b": bossか, "S": [戦闘数, {艦ID: 数}], "O": [..A/B勝利..]}}},
       dden: {map: {node: {区間の開始時刻: [S戦闘数, A/B戦闘数]}}},
       dsid: {map: {node: {艦ID: {区間の開始時刻: [S, A/B]}}}},     # 全艦
-      lastdrop: {map: {node: {艦ID: 最後にドロップした時刻}}}
+      lastdrop: {map: {node: {艦ID: 最後にドロップした時刻}}},
+      rep:  {map: {node: {艦ID: [報告者(最大30), {ツール: 数}, 1時間の最大件数]}}},
+      orig: {map: {node: {ツール: 数}}},     # マス全体のツールの内訳
+      rej:  {map: {node: {理由: 数}}}        # 誤記録として捨てた件数
     }
+    誤記録として捨てるもの: 海域名 (quest) が無い / 敵編成が空 / そのマスでほとんど出ない敵編成
+    (別のマスの記録が紛れ込んだもの)。
     区間は日本時間の 1 日ごと。さらにアップデート日時でも区切るので、
     登録済みの日時については秒単位で正確に「それ以降」だけを取り出せる。
     """
@@ -332,6 +340,13 @@ def aggregate_drops(path, routes, cuts=()):
     lastdrop = {}
     meta = {}
     total = used = 0
+    fcnt = defaultdict(int)      # (month, mapId, cell, 敵編成) -> n
+    hold = {}                    # 同上 -> [(bk, rc, sid)] (FLEET_HOLD 回まで)
+    rej = defaultdict(int)       # (month, mapId, cell, 理由) -> n
+    repo = {}                    # (month, mapId, cell, sid) -> [set(報告者), Counter(ツール), Counter(時)]
+    orig = defaultdict(int)      # (month, mapId, cell, ツール) -> n
+    quest_of = {}                # mapId -> 最初に見た海域名 (後で多数決)
+    quests = defaultdict(lambda: defaultdict(int))
     for d in iter_archive_docs(path):
         if "mapId" not in d or "_id" not in d:
             continue
@@ -357,8 +372,36 @@ def aggregate_drops(path, routes, cuts=()):
         except (TypeError, ValueError):
             continue
         mo = month_of(ts)
+        q = d.get("quest")
+        fleet = tuple(d.get("enemyShips1") or ())
+        if not q:
+            rej[(mo, map_id, cell, "海域名なし")] += 1
+            continue
+        if not fleet:
+            rej[(mo, map_id, cell, "敵編成なし")] += 1
+            continue
+        quests[map_id][q] += 1
         bk = day_bucket(ts, cuts)
         used += 1
+        fk = (mo, map_id, cell, fleet)
+        fcnt[fk] += 1
+        if fcnt[fk] <= FLEET_HOLD:
+            hold.setdefault(fk, []).append((bk, rc, sid, q))
+        elif fk in hold:
+            del hold[fk]
+        ok = str(d.get("origin") or "?").split("/")[0]
+        orig[(mo, map_id, cell, ok)] += 1
+        if sid:
+            fp = d.get("teitokuId") or f"{d.get('origin')}|{d.get('teitokuLv')}"
+            rp = repo.get((mo, map_id, cell, sid))
+            if rp is None:
+                rp = repo[(mo, map_id, cell, sid)] = [set(), defaultdict(int), defaultdict(int), 0]
+            rp[3] += 1
+            if len(rp[0]) < REP_KEEP:
+                rp[0].add(hashlib.sha1(str(fp).encode()).hexdigest()[:10])
+            rp[1][ok] += 1
+            if rp[3] <= 500:
+                rp[2][ts // 3600] += 1
         cnt[(mo, map_id, cell, rc, sid)] += 1
         dden[(mo, map_id, cell, bk, rc)] += 1
         if sid:
@@ -374,7 +417,36 @@ def aggregate_drops(path, routes, cuts=()):
             m[1] = ts
         if ts > m[2]:
             m[2] = ts
-    log(f"  ドロップ: {total:,} 件中 {used:,} 件を集計 (通常海域・S/A/B勝利)")
+    # 誤記録の取り消し: そのマスでほとんど出ない敵編成 / 海域名が他と違う
+    node_n = defaultdict(int)
+    for (mo, map_id, cell, rc, sid), n in cnt.items():
+        node_n[(mo, map_id, cell)] += n
+    main_q = {m: max(qs.items(), key=lambda kv: kv[1])[0] for m, qs in quests.items()}
+    dropped = 0
+    for (mo, map_id, cell, fleet), lst in hold.items():
+        bad_fleet = fcnt[(mo, map_id, cell, fleet)] / max(1, node_n[(mo, map_id, cell)]) < FLEET_MIN_SHARE
+        for bk, rc, sid, q in lst:
+            reason = ("ほかのマスの敵編成" if bad_fleet else
+                      "海域名が違う" if q != main_q.get(map_id) else None)
+            if not reason:
+                continue
+            dropped += 1
+            rej[(mo, map_id, cell, reason)] += 1
+            cnt[(mo, map_id, cell, rc, sid)] -= 1
+            dden[(mo, map_id, cell, bk, rc)] -= 1
+            if sid:
+                dsid[(mo, map_id, cell, bk, rc, sid)] -= 1
+                rp = repo.get((mo, map_id, cell, sid))
+                if rp:
+                    rp[3] -= 1
+    for dct in (cnt, dden, dsid):
+        for k in [k for k, v in dct.items() if v <= 0]:
+            del dct[k]
+    alive = {(k[0], k[1], k[2], k[5]) for k in dsid}
+    for k in [k for k in lastdrop if k not in alive]:
+        del lastdrop[k]
+    log(f"  ドロップ: {total:,} 件中 {used - dropped:,} 件を集計 (通常海域・S/A/B勝利)。"
+        f"誤記録として除外 {sum(rej.values()):,} 件")
 
     def place(map_id, cell):
         m = f"{map_id // 10}-{map_id % 10}"
@@ -383,7 +455,8 @@ def aggregate_drops(path, routes, cuts=()):
     out = {}
     for mo, (n, first, last) in meta.items():
         out[mo] = {"v": STATE_VERSION, "month": mo, "records": n, "first": first, "last": last,
-                   "cuts": cuts, "final": False, "tot": {}, "dden": {}, "dsid": {}, "lastdrop": {}}
+                   "cuts": cuts, "final": False, "tot": {}, "dden": {}, "dsid": {}, "lastdrop": {},
+                   "rep": {}, "orig": {}, "rej": {}}
     unknown = set()
     for (mo, map_id, cell, rc, sid), n in cnt.items():
         m, node = place(map_id, cell)
@@ -410,6 +483,22 @@ def aggregate_drops(path, routes, cuts=()):
         d = out[mo]["lastdrop"].setdefault(m, {}).setdefault(node, {})
         if ts > d.get(str(sid), 0):
             d[str(sid)] = ts
+    for (mo, map_id, cell, sid), (fps, oks, hrs, n) in repo.items():
+        if n <= 0 or (mo, map_id, cell, sid) not in alive:
+            continue
+        m, node = place(map_id, cell)
+        out[mo]["rep"].setdefault(m, {}).setdefault(node, {})[str(sid)] = [
+            sorted(fps), dict(oks), max(hrs.values()) if hrs else 0]
+    for (mo, map_id, cell, ok), n in orig.items():
+        m, node = place(map_id, cell)
+        o = out[mo]["orig"].setdefault(m, {}).setdefault(node, {})
+        o[ok] = o.get(ok, 0) + n
+    for (mo, map_id, cell, reason), n in rej.items():
+        if mo not in out:
+            continue
+        m, node = place(map_id, cell)
+        o = out[mo]["rej"].setdefault(m, {}).setdefault(node, {})
+        o[reason] = o.get(reason, 0) + n
     if unknown:
         warn("マス名が不明なセルがあります (#番号で表示): " + ", ".join(sorted(unknown)[:30]))
     return out
@@ -560,31 +649,78 @@ JUDGE_LABEL = {
 }
 
 
+def classify_series(c, n, now, w0):
+    """週ごとのドロップ数 c と戦闘数 n から出方を判定する (1 つの勝利ランク分)。"""
+    nweeks = len(c)
+    act = [w for w in range(nweeks) if c[w]]
+    if not act:
+        return None
+    first, last = act[0], act[-1]
+    C = sum(c)
+    span_n = sum(n[first:last + 1]) or 1
+    r = sum(c[first:last + 1]) / span_n
+    lead = r * sum(n[:first])
+    trail = r * sum(n[last + 1:])
+    # seg: 今続いている出方が始まった週 (途切れた期間の後、または出始め)。0 なら期間のはじめから
+    seg = first if lead >= GAP_EXPECT else 0
+    gap, run = 0.0, 0.0
+    segs, s0, prev = [], first, first     # 出ていた期間 [(始めの週, 終わりの週)]
+    for w in range(first, last + 1):
+        if c[w]:
+            if run >= GAP_EXPECT:
+                seg = w
+                segs.append((s0, prev))
+                s0 = w
+            gap, run = max(gap, run), 0.0
+            prev = w
+        else:
+            run += r * n[w]
+    segs.append((s0, last))
+    gap = max(gap, run)
+    if C <= 2 and sum(n[first:]) >= SINGLE_MIN_BATTLES:
+        cls = "misreport"      # 出始めてから今までに戦闘が十分あるのに 2 件以下
+    elif trail >= GAP_EXPECT:
+        cls = "stopped"
+    elif gap >= GAP_EXPECT:
+        cls = "intermittent"
+    elif lead >= GAP_EXPECT:
+        cls = "added" if now - (w0 + first * WEEK) >= NEW_DAYS * DAY else "new"
+    else:
+        cls = "continuous"
+    return {"cls": cls, "C": C, "seg": (w0 + seg * WEEK) if seg else None,
+            "segs": [(b - a + 1) for a, b in segs]}
+
+
+# 勝利ランクごとの判定をまとめるときの優先順 (どれかのランクで今も出ていれば出ている)
+CLS_ORDER = ["continuous", "added", "intermittent", "new", "stopped", "misreport"]
+
+
 def judge_pairs(states, months, now):
     """データだけで、各マス・各艦の出方を判定する。
 
     期間を週ごとに区切り、その艦のふだんの率から「その週に何回出るはずか」を求める。
     出るはずの回数の合計が GAP_EXPECT 回以上の区間で 1 回も出ていなければ、その区間は「出ていない」とみなす。
-    これで、出にくい艦がたまたま出なかっただけで外れることはない。
+    S 勝利と A/B 勝利ではドロップ表が違う (ボスの A/B 勝利でしか出ない艦がある) ので、別々に判定してまとめる。
 
-    戻り値: {(海域, マス, 艦ID): {"cls", "C", "N", "first", "last", "weeks"}}
+    戻り値: {(海域, マス, 艦ID): {"cls", "rank", "C", "N", "first", "last", "seg", "rep"}}
     """
     if not months:
         return {}
     w0 = month_start(months[0]) - 9 * 3600          # 日本時間の月初
     nweeks = (now - w0) // WEEK + 1
-    den = defaultdict(lambda: [0] * nweeks)
+    den = defaultdict(lambda: ([0] * nweeks, [0] * nweeks))
     for mo in months:
         for m, nodes in states[mo]["dden"].items():
             for node, bks in nodes.items():
                 if node.startswith("#"):
                     continue
                 arr = den[(m, node)]
-                for bk, (a, b) in bks.items():
+                for bk, ab in bks.items():
                     w = (int(bk) - w0) // WEEK
                     if 0 <= w < nweeks:
-                        arr[w] += a + b
-    out = {}
+                        arr[0][w] += ab[0]
+                        arr[1][w] += ab[1]
+    raw = {}
     for mo in months:
         for m, nodes in states[mo]["dsid"].items():
             for node, sids in nodes.items():
@@ -592,51 +728,129 @@ def judge_pairs(states, months, now):
                     continue
                 for sid, bks in sids.items():
                     k = (m, node, int(sid))
-                    rec = out.setdefault(k, {"c": [0] * nweeks, "b0": None, "b1": None})
-                    for bk, (a, b) in bks.items():
+                    rec = raw.get(k)
+                    if rec is None:
+                        rec = raw[k] = {"c": ([0] * nweeks, [0] * nweeks), "b0": None, "b1": None,
+                                        "fp": set(), "ok": defaultdict(int), "hr": 0}
+                    for bk, ab in bks.items():
                         w = (int(bk) - w0) // WEEK
-                        if 0 <= w < nweeks and a + b:
-                            rec["c"][w] += a + b
+                        if 0 <= w < nweeks and ab[0] + ab[1]:
+                            rec["c"][0][w] += ab[0]
+                            rec["c"][1][w] += ab[1]
                             bk = int(bk)
                             rec["b0"] = bk if rec["b0"] is None else min(rec["b0"], bk)
                             rec["b1"] = bk if rec["b1"] is None else max(rec["b1"], bk)
-    for (m, node, sid), rec in out.items():
-        c, n = rec.pop("c"), den[(m, node)]
-        b0, b1 = rec.pop("b0"), rec.pop("b1")
-        if b0 is None:
+        for m, nodes in states[mo].get("rep", {}).items():
+            for node, sids in nodes.items():
+                for sid, (fps, oks, hr) in sids.items():
+                    rec = raw.get((m, node, int(sid)))
+                    if rec is None:
+                        continue
+                    if len(rec["fp"]) < REP_KEEP:
+                        rec["fp"].update(fps[:REP_KEEP - len(rec["fp"])])
+                    for ok, v in oks.items():
+                        rec["ok"][ok] += v
+                    rec["hr"] = max(rec["hr"], hr)
+    out = {}
+    for (m, node, sid), rec in raw.items():
+        if rec["b0"] is None:
             continue
-        C, N = sum(c), sum(n)
-        act = [w for w in range(nweeks) if c[w]]
-        first, last = act[0], act[-1]
-        span_n = sum(n[first:last + 1]) or 1
-        r = sum(c[first:last + 1]) / span_n
-        lead = r * sum(n[:first])
-        trail = r * sum(n[last + 1:])
-        # seg: 今続いている出方が始まった週 (途切れた期間の後、または出始め)。0 なら期間のはじめから
-        seg = first if lead >= GAP_EXPECT else 0
-        gap, run = 0.0, 0.0
-        for w in range(first, last + 1):
-            if c[w]:
-                if run >= GAP_EXPECT:
-                    seg = w
-                gap, run = max(gap, run), 0.0
-            else:
-                run += r * n[w]
-        gap = max(gap, run)
-        # 誤報告: 出始めてから今までに戦闘が十分あるのに 2 件以下
-        if C <= 2 and sum(n[first:]) >= SINGLE_MIN_BATTLES:
-            cls = "misreport"
-        elif trail >= GAP_EXPECT:
-            cls = "stopped"
-        elif gap >= GAP_EXPECT:
-            cls = "intermittent"
-        elif lead >= GAP_EXPECT:
-            cls = "added" if now - (w0 + first * WEEK) >= NEW_DAYS * DAY else "new"
-        else:
-            cls = "continuous"
-        rec.update(cls=cls, C=C, N=N, first=b0, last=b1, weeks=len(act),
-                   seg=(w0 + seg * WEEK) if seg else None)
-    return {k: v for k, v in out.items() if "cls" in v}
+        nS, nO = den[(m, node)]
+        res = {}
+        for ri, (c, n) in enumerate(zip(rec["c"], (nS, nO))):
+            x = classify_series(c, n, now, w0)
+            if x:
+                res["S" if ri == 0 else "AB"] = x
+        best = min(res.items(), key=lambda kv: CLS_ORDER.index(kv[1]["cls"]))
+        C = sum(x["C"] for x in res.values())
+        out[(m, node, sid)] = {
+            "cls": best[1]["cls"], "rank": best[0], "C": C, "N": sum(nS) + sum(nO),
+            "first": rec["b0"], "last": rec["b1"], "seg": best[1]["seg"], "segs": best[1]["segs"],
+            "rep": {"fp": len(rec["fp"]), "ok": dict(rec["ok"]), "hr": rec["hr"]},
+        }
+    return out
+
+
+def suspicious(j, node_orig):
+    """少ない報告が 1 人・1 時間・1 種類のツールに偏っていないか。偏っていれば理由を返す。"""
+    rp = j.get("rep") or {}
+    C = j.get("C", 0)
+    if C < 3 or not rp:
+        return ""
+    fp = rp.get("fp", 0)
+    if not fp:
+        return ""          # 報告者の情報が無い (古い形式のデータ)
+    if fp < REP_KEEP and fp <= max(1, C // 5):
+        return f"報告者が {fp} 人だけ ({C} 件)"
+    if C >= 5 and rp.get("hr", 0) >= C * 0.5:
+        return f"{rp['hr']} 件が同じ 1 時間に集中"
+    ok = rp.get("ok") or {}
+    tot = sum(node_orig.values()) or 1
+    if C >= 10 and len(ok) == 1:
+        tool = next(iter(ok))
+        if node_orig.get(tool, 0) / tot < 0.9:
+            return f"すべて {tool} からの報告"
+    return ""
+
+
+def change_notes(judged, cfg, now, on_node, on_map):
+    """出始め・出なくなった日を、メンテナンスの日に合わせて文章にする。限定の可能性も付ける。
+
+    メンテナンスの日 = 管理画面に登録したアップデート日時の日 + 同じ日に 2 海域以上・3 組以上が
+    いっせいに出始めた (または出なくなった) 日。率の低い艦はアプデから数日後に初めて出ることがあるので、
+    出始めはその日以前で一番近いメンテ日 (14 日以内) に、出なくなったのは最終ドロップ以後で一番近いメンテ日にあてる。
+    """
+    day = lambda ts: (ts + 9 * 3600) // DAY  # noqa: E731  日本時間の日番号
+    ev = defaultdict(set)    # 日 -> 海域
+    evn = defaultdict(int)
+    for (m, node, sid), j in judged.items():
+        if j["cls"] in ("new", "added"):
+            ev[day(j["first"])].add(m)
+            evn[day(j["first"])] += 1
+        elif j["cls"] == "stopped":
+            ev[day(j["last"]) + 1].add(m)
+            evn[day(j["last"]) + 1] += 1
+    maint = {d for d in ev if len(ev[d]) >= 2 and evn[d] >= 3}
+    for u in cfg.get("updates", []):
+        try:
+            maint.add(day(parse_dt(u.get("at") if isinstance(u, dict) else u)))
+        except (ValueError, TypeError, AttributeError):
+            pass
+    ms = sorted(maint)
+    fmt = lambda d: fmt_dt(d * DAY - 9 * 3600)[:10]  # noqa: E731
+
+    def before(d):
+        c = [x for x in ms if d - 14 <= x <= d]
+        return c[-1] if c else None
+
+    def after(d):
+        c = [x for x in ms if d < x <= d + 14]
+        return c[0] if c else None
+
+    starts = defaultdict(int)   # (海域, メンテ日) -> 出始めた組の数
+    res = {}
+    for k, j in judged.items():
+        m = k[0]
+        if j["cls"] in ("new", "added"):
+            d = before(day(j["first"]))
+            res[k] = {"change": f"{fmt(d)} のメンテから出始め" if d else f"{fmt(day(j['first']))} ごろから出始め",
+                      "_d": d if j["cls"] == "new" else None}
+            if d:
+                starts[(m, d)] += 1
+        elif j["cls"] == "stopped":
+            d = after(day(j["last"]))
+            res[k] = {"change": f"{fmt(d)} のメンテから出ていない" if d else f"{fmt(day(j['last']))} 以降出ていない"}
+        elif j["cls"] == "intermittent":
+            res[k] = {"change": f"{fmt_dt(j['seg'])[:10]} ごろ再開（途切れた期間あり）" if j.get("seg") else "途切れた期間あり"}
+            # 以前の出ていた期間が短く (20 週以内)、今の期間も始まって 120 日以内なら、季節ごとの限定の可能性
+            past = (j.get("segs") or [])[:-1]
+            if past and min(past) <= 20 and j.get("seg") and now - j["seg"] <= 120 * DAY:
+                res[k]["lim"] = f"以前にも {min(past)} 週ほど出て止まったことがある（季節ごとの限定の可能性）"
+    for k, x in res.items():
+        d = x.pop("_d", None)
+        if d and starts[(k[0], d)] >= 3 and not x.get("lim"):
+            x["lim"] = f"同じメンテで同じ海域の {starts[(k[0], d)]} 組がいっせいに出始めた（限定の可能性）"
+    return res
 
 
 def build_drop_data(states, cfg, ships, now, wiki=None):
@@ -669,6 +883,30 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
     hist = [mo for mo in months if mo >= history_start(now, cfg["history_months"])]
     judged = judge_pairs(states, hist, now)
     mode = cfg.get("rate_mode", "node_s")
+
+    # 手動で限定にしたもの (追加日時が基準日時より前のものは外れる)
+    manual_lim = set()
+    for e in cfg["limited_manual"]:
+        try:
+            added = parse_dt(e.get("added")) if e.get("added") else now
+        except ValueError:
+            added = now
+        if added >= (cutoff if cutoff is not None else 0):
+            manual_lim.add(norm3(e))
+    # マスごとのツールの内訳 (報告の偏りを調べるため)
+    node_orig = defaultdict(lambda: defaultdict(int))
+    for mo in hist:
+        for m, nodes in states[mo].get("orig", {}).items():
+            for node, oks in nodes.items():
+                for ok, v in oks.items():
+                    node_orig[(m, node)][ok] += v
+    # その海域で、その艦が最初に出た時刻 (どのマスでも)
+    map_first = {}
+    for (m, node, sid), j in judged.items():
+        k = (m, sid)
+        map_first[k] = min(map_first.get(k, j["first"]), j["first"])
+    hist_from = month_start(hist[0]) - 9 * 3600 if hist else now
+    notes = change_notes(judged, cfg, now, on_node, on_map)
     single = []
 
     def rate(ds, do, ns, no, m=None, mden=None):
@@ -782,6 +1020,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
                 pub, why = "常設", "manual"
             elif page == "ongoing":
                 pub, why = "限定", "page"
+            elif k3 in manual_lim:
+                pub, why = "限定", "manual_lim"
             elif cls == "fewnode":
                 pub, why = "", cls
             elif k3 in res_off:
@@ -800,6 +1040,14 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             # 出始めたばかりで 2 件以下は、まだ誤報告と見分けられないので載せない
             if pub == "常設" and why == "new" and j.get("C", 0) <= 2:
                 pub, why = "", "unconfirmed"
+            # 報告が 1 人・1 時間・1 種類のツールに偏っているものは載せない (誤報告・いたずら対策)
+            sus = suspicious(j, node_orig[(m, node)]) if j else ""
+            if sus and why not in ("manual", "page", "manual_lim"):
+                pub, why = "", "suspect"
+            # その海域で初めて出た艦 (判定期間のはじめから 60 日以上たってから出始めた) は、管理画面で承認するまで載せない
+            if (pub == "常設" and why not in ("manual",) and cls == "new"
+                    and map_first.get((m, sid)) == j.get("first") and j["first"] - hist_from >= NEW_DAYS * DAY):
+                pub, why = "", "hold"
             if pub == "常設":
                 seg = j.get("seg")
                 if seg:
@@ -823,21 +1071,17 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             else:
                 pub = "除外" if k3 in exclude else ""
             if j or pub:
+                nt = notes.get((m, node, sid), {})
                 judge_rows.append([m, node, nm, cls, j.get("C", 0), j.get("N", 0),
                                    fmt_dt(j["first"])[:10] if j else "", fmt_dt(min(j["last"], now))[:10] if j else "",
-                                   int(k3 in wiki_set), page, pub, why])
+                                   int(k3 in wiki_set), page, pub, why,
+                                   j.get("rank", ""), nt.get("change", ""), nt.get("lim", ""), sus])
         # 手動で追加した限定 (追加日時が基準日時より前のものは自動的に外れる)
         for e in cfg["limited_manual"]:
             if e.get("map") != m or e.get("node") != node or not e.get("ship"):
                 continue
             nn = norm_name(e["ship"])
-            if nn in seen:
-                continue
-            try:
-                added = parse_dt(e.get("added")) if e.get("added") else now
-            except ValueError:
-                added = now
-            if added < start:
+            if nn in seen or (m, node, nn) not in manual_lim:
                 continue
             sid = id_by_norm.get(nn)
             rows.append([name_of.get(sid, e["ship"]), ti_of.get(sid, 7), 1, None, 0, 0, "", "manual"])
@@ -851,11 +1095,14 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         if (m, node) in tot:
             nm = next((n for col in wiki[m][node] for n in col if norm_name(n) == nn), nn)
             x = tot[(m, node)]
-            judge_rows.append([m, node, nm, "none", 0, x[0] + x[1], "", "", 1, "", "", ""])
+            judge_rows.append([m, node, nm, "none", 0, x[0] + x[1], "", "", 1, "", "", "", "", "", "", ""])
 
+    rejected = sum(v for mo in hist for nodes in states[mo].get("rej", {}).values()
+                   for rs in nodes.values() for v in rs.values())
     first = min((states[mo]["first"] for mo in hist), default=None)
     last = max((states[mo]["last"] for mo in months), default=None)
     data = {
+        "rejected": rejected,
         "generated": fmt_dt(now),
         "data_from": fmt_dt(first) if first else None,
         "data_to": fmt_dt(last) if last else None,
@@ -874,7 +1121,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         "generated": fmt_dt(now),
         "months": hist,
         "labels": JUDGE_LABEL,
-        "columns": ["map", "node", "ship", "class", "drops", "battles", "first", "last", "wiki", "page", "published", "why"],
+        "columns": ["map", "node", "ship", "class", "drops", "battles", "first", "last", "wiki", "page", "published", "why",
+                    "rank", "change", "lim", "suspect"],
         "rows": judge_rows,
     }
     return data, judge

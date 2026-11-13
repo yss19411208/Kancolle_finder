@@ -145,6 +145,7 @@ function renderDash() {
     ['有効なアップデート日時', d.cutoff || 'なし（全期間）'],
     ['常設の判定期間', ((S.judge || {}).months || []).length ? `${S.judge.months[0]} 〜 ${S.judge.months[S.judge.months.length - 1]}（設定 ${S.config.history_months} か月）` : 'なし'],
     ['限定ドロップ', `${nLim} 件（うち手動 ${nMan} 件）`],
+    ['誤記録として除外', (S.drop && S.drop.rejected != null) ? `${Number(S.drop.rejected).toLocaleString()} 件（判定期間の合計）` : '—'],
     ['海域数', Object.keys(d.maps || {}).length],
   ];
   $('rateMode').value = S.config.rate_mode || 'node_s';
@@ -318,7 +319,7 @@ function renderResident() {
 }
 // ---------------------------------------------------------------- 常設の判定 (data/judge.json)
 const JG_CLASS = { continuous: 'ok', added: 'ok', new: 'ok', stopped: 'ng', intermittent: 'ok', misreport: 'ng', fewnode: 'ng', none: '' };
-const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み・その後も出ている', manual: '手動で常設', page: '限定ページで継続中', auto: '', manual_off: '手動で外した', unconfirmed: 'アップデート後に未確認・件数不足', fewnode: '', new: '', intermittent: '再開後の率', stopped: '', misreport: '' };
+const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み・その後も出ている', manual: '手動で常設', page: '限定ページで継続中', auto: '', manual_off: '手動で外した', unconfirmed: 'アップデート後に未確認・件数不足', fewnode: '', suspect: '報告が偏っている', hold: '承認待ち（初めて出た艦）', manual_lim: '手動で限定', new: '', intermittent: '再開後の率', stopped: '', misreport: '' };
 let jgRows = [];
 function renderJudge() {
   const j = S.judge || { columns: [], rows: [], labels: {} };
@@ -343,6 +344,7 @@ function drawJudge() {
   const f = {
     check: r => (r.wiki && !pub(r)) || (!r.wiki && pub(r)) || r.class === 'stopped',
     wikinot: r => r.wiki && !pub(r), notwiki: r => !r.wiki && pub(r), stopped: r => r.class === 'stopped', misreport: r => r.class === 'misreport', unconfirmed: r => r.why === 'unconfirmed',
+    limcand: r => r.lim && r.published === '常設', change: r => !!r.change, suspect: r => !!r.suspect, hold: r => r.why === 'hold',
     pubnone: r => !r.published, all: () => true,
   }[view] || (r => r.published === view.slice(3));
   const rows = jgRows.filter(r => f(r) && matchQ(r.key, q));
@@ -360,23 +362,27 @@ function drawJudge() {
     const a = { map: r.map, node: r.node, ship: r.ship };
     const forced = force.some(e => same(e, a)), offed = off.some(e => same(e, a));
     let btn;
+    const lims = S.config.limited_manual, limd = lims.some(e => same(e, a));
+    const toLim = el('button', { class: 'btn small', on: { click: () => { lims.push(Object.assign({ added: fmt(new Date()) }, a)); markDirty('config', `手動の限定を追加 ${r.map}-${r.node} ${r.ship}`); renderJudge(); renderLimited(); } } }, '限定にする');
     if (forced) btn = el('span', { class: 'tag' }, '手動で常設');
     else if (offed) btn = el('span', { class: 'tag' }, '外す設定済み');
-    else if (r.published === '常設') btn = el('button', { class: 'btn small', on: { click: () => { off.push(a); markDirty('config', `常設から外す ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設から外す');
-    else btn = el('button', { class: 'btn small', on: { click: () => { force.push(a); markDirty('config', `常設にする ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設にする');
+    else if (limd) btn = el('span', { class: 'tag wait' }, '手動で限定');
+    else if (r.published === '常設') btn = el('div', { class: 'btns' }, el('button', { class: 'btn small', on: { click: () => { off.push(a); markDirty('config', `常設から外す ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設から外す'), r.page !== 'ongoing' ? toLim : null);
+    else btn = el('div', { class: 'btns' }, el('button', { class: 'btn small', on: { click: () => { force.push(a); markDirty('config', `常設にする ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設にする'), r.published !== '限定' && r.page !== 'ongoing' ? toLim : null);
     const why = JG_WHY[r.why] || '';
     return el('tr', {},
       el('td', {}, r.map), el('td', {}, r.node), el('td', {}, r.ship),
-      el('td', {}, el('span', { class: 'tag ' + (JG_CLASS[r.class] || '') }, labels[r.class] || r.class || '—')),
+      el('td', {}, el('span', { class: 'tag ' + (JG_CLASS[r.class] || '') }, labels[r.class] || r.class || '—'), r.rank ? el('div', { class: 'sub' }, r.rank === 'S' ? 'S勝利' : 'A/B勝利') : null),
       el('td', {}, r.published ? el('span', { class: 'tag ' + (r.published === '常設' ? '' : r.published === '限定' ? 'wait' : 'ng') }, r.published) : '—',
         why ? el('div', { class: 'sub' }, why) : null),
       el('td', { class: 'num' }, `${Number(r.drops).toLocaleString()} / ${Number(r.battles).toLocaleString()}`),
       el('td', { class: 'num' }, r.first || '—'),
       lastCell(r.map, r.node, r.ship),
+      el('td', { class: 'notes' }, r.change ? el('div', {}, r.change) : null, r.lim ? el('div', { class: 'warn' }, '⚑ ' + r.lim) : null, r.suspect ? el('div', { class: 'warn' }, '⚠ ' + r.suspect) : null, !(r.change || r.lim || r.suspect) ? '—' : null),
       el('td', {}, r.wiki ? '常駐' : '—'),
       evCell(limitedEvents(r.map, r.node, r.ship), '記載なし'),
       el('td', {}, btn));
-  }) : [el('tr', {}, el('td', { colSpan: 11 }, '該当なし'))]));
+  }) : [el('tr', {}, el('td', { colSpan: 12 }, '該当なし'))]));
 }
 function renderOverrides() {
   const table = (id, list, label, what) => $(id).tBodies[0].replaceChildren(...(list.length ? list.map(e => el('tr', {},

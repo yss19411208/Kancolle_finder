@@ -135,3 +135,5 @@ td.none-cell{color:#9aa9ad}
 td .sub{font-size:11px;color:var(--sub);margin-top:2px}
 #jgTable th,#jgTable td:nth-child(-n+3),#jgTable td:nth-child(n+6):nth-child(-n+9),#jgTable .tag{white-space:nowrap}
 #jgTable td:nth-child(10){min-width:16em}
+.btns{display:flex;gap:4px;flex-wrap:wrap}
+#jgTable td.notes{min-width:14em;font-size:12px}
