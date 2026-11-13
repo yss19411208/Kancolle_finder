@@ -25,6 +25,7 @@ import struct
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -136,6 +137,8 @@ def http_get(url, dest=None, timeout=120, tries=8):
                 return size
             raise IOError(f"途中で切れました ({size / 1e6:.1f} / {total / 1e6:.1f} MB)")
         except Exception as e:  # noqa: BLE001
+            if isinstance(e, urllib.error.HTTPError) and e.code == 404:
+                raise RuntimeError(f"ファイルがありません (404): {url}") from e
             last = e
             more = f"、{size / 1e6:.1f} MB まで受信済み・続きから再開" if dest is not None and size else ""
             log(f"  取得失敗 ({i + 1}/{tries}) {url}: {e}{more}")
@@ -1118,7 +1121,8 @@ def main():
                         os.makedirs(args.state_dir, exist_ok=True)
                         if not dump_ver:
                             dump_ver = {f: http_head(DUMP_BASE + f) for f in ("dropshiprecords.gz", "createshiprecords.gz")}
-                        save_json(meta_path, {"sig": sig, "fetched_at": now, "dump_ver": dump_ver})
+                        meta.update(sig=sig, fetched_at=now, dump_ver=dump_ver)
+                        save_json(meta_path, meta)
                 else:
                     new = aggregate_builds(path)
                     build_states = merge_state(args.state_dir, "build", build_states, new)
@@ -1145,8 +1149,12 @@ def main():
             while mo < cur:
                 months.append(mo)
                 mo = next_month(mo)
+            # db.poi.moe に無い月 (2 か月分まとめたファイルに入っている月など) は 7 日間は探し直さない
+            missing = {k: v for k, v in (meta.get("archive_missing") or {}).items() if now - v < 7 * DAY}
             todo = []
             for mo in reversed(months):
+                if mo in missing:
+                    continue
                 st = drop_states.get(mo)
                 in_month = cutoff is not None and month_start(mo) <= cutoff < month_start(next_month(mo))
                 if st and st.get("final") and (not in_month or cutoff in st.get("cuts", [])):
@@ -1160,27 +1168,66 @@ def main():
                 if os.environ.get("GITHUB_OUTPUT"):
                     with open(os.environ["GITHUB_OUTPUT"], "a") as f:
                         f.write("pending=1\n")
+            def complete(st, mo):
+                """ファイルにその月が丸ごと入っているか (前後 2 日の余裕をみる)"""
+                return (st["first"] <= month_start(mo) + 2 * DAY
+                        and st["last"] >= month_start(next_month(mo)) - 2 * DAY)
+
+            done = set()
             for mo in todo:
-                url = archive_url("dropshiprecords", mo)
+                if mo in done:
+                    continue   # この実行で、別の月のファイルからすでに取り込んだ
+                # その月のファイル。無ければ翌月のファイル (2 か月分まとめて入っていることがある)
+                urls = [archive_url("dropshiprecords", mo)]
+                if next_month(mo) < cur:
+                    urls.append(archive_url("dropshiprecords", next_month(mo)))
                 path = os.path.join(tmp, f"archive_{mo}.gz")
-                try:
-                    log(f"過去月アーカイブ {mo}: {url}")
-                    size = http_get(url, dest=path, timeout=600)
-                    log(f"  {size / 1e6:.1f} MB")
-                    new = aggregate_drops(path, routes, cuts)
-                    if mo not in new:
-                        raise RuntimeError(f"{mo} の記録が含まれていません")
-                    new[mo]["final"] = True
-                    drop_states = merge_state(args.state_dir, "drop", drop_states, {mo: new[mo]}, force=True)
-                    notes.append(f"{mo} の過去月アーカイブを取り込み ({new[mo]['records']:,} 件)")
-                except Exception as e:  # noqa: BLE001
-                    warn(f"{mo} の過去月アーカイブを取り込めませんでした (月初 1〜2 日は未公開のことがあります): {e}")
-                    notes.append(f"{mo} の過去月アーカイブを取り込めず")
-                finally:
+                err, not_found = None, False
+                for url in urls:
                     try:
-                        os.remove(path)
-                    except OSError:
-                        pass
+                        log(f"過去月アーカイブ {mo}: {url}")
+                        size = http_get(url, dest=path, timeout=600)
+                        log(f"  {size / 1e6:.1f} MB")
+                        new = aggregate_drops(path, routes, cuts)
+                        if mo not in new or not complete(new[mo], mo):
+                            raise RuntimeError(f"{mo} の記録が丸ごとは含まれていません")
+                        # 目的の月と、同じファイルに丸ごと入っていた他の月 (判定期間内のもの) を保存
+                        got = {}
+                        for k, st in new.items():
+                            if k in months and (k == mo or (complete(st, k) and not (drop_states.get(k) or {}).get("final"))):
+                                st["final"] = True
+                                got[k] = st
+                        drop_states = merge_state(args.state_dir, "drop", drop_states, got, force=True)
+                        done |= set(got)
+                        for k in sorted(got):
+                            notes.append(f"{k} の過去月アーカイブを取り込み ({got[k]['records']:,} 件)")
+                            missing.pop(k, None)
+                        err = None
+                        break
+                    except Exception as e:  # noqa: BLE001
+                        err = e
+                        log(f"  {e}")
+                        if url == urls[0]:
+                            not_found = "404" in str(e)
+                            if not not_found:
+                                break   # その月のファイルはあるのに失敗した (途中で切れた等): 次回取り直す
+                    finally:
+                        try:
+                            os.remove(path)
+                        except OSError:
+                            pass
+                if err is not None:
+                    if not_found:
+                        missing[mo] = now
+                        warn(f"{mo} の過去月アーカイブは db.poi.moe にありません。7 日後にもう一度探します")
+                        notes.append(f"{mo} の過去月アーカイブは公開されていないため取り込めず")
+                    else:
+                        warn(f"{mo} の過去月アーカイブを取り込めませんでした。次回もう一度取り込みます: {err}")
+                        notes.append(f"{mo} の過去月アーカイブを取り込めず")
+            if missing != (meta.get("archive_missing") or {}):
+                meta["archive_missing"] = missing
+                os.makedirs(args.state_dir, exist_ok=True)
+                save_json(meta_path, meta)
 
     old_drop = load_json(os.path.join(ROOT, "Drop_Data.json"))
     # 判定期間より古い月は使わないので消す (容量を抑えるため)
