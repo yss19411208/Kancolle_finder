@@ -1,0 +1,36 @@
+name: 記録の取り出し（調査用）
+
+# Actions の画面から手動で実行する。公開ページやデータには何も書き込まない。
+# 結果は実行画面の下の「Artifacts」から zip でダウンロードする。
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "月 (例: 2026-04)。空なら当月のダンプ"
+        required: false
+        default: ""
+      targets:
+        description: "対象 (例: 1-2-D 卯月, 1-1-A 神通)。auto なら、2 件以下しか出ていない珍しい艦を自動で選ぶ"
+        required: true
+        default: "auto"
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet -r scripts/requirements.txt
+      - name: 記録を取り出す
+        run: python scripts/extract_records.py --month "${{ inputs.month }}" --targets "${{ inputs.targets }}" --out out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: records-${{ inputs.month || 'current' }}
+          path: out/
+          retention-days: 14
