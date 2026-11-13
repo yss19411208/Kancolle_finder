@@ -28,6 +28,11 @@
       "map": "3-1",
       "node": "G",
       "ship": "天霧"
+    },
+    {
+      "map": "5-6",
+      "node": "Z",
+      "ship": "睦月"
     }
   ],
   "limited_keep": [],
