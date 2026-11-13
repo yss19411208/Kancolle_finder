@@ -23,7 +23,7 @@ concurrency:
 jobs:
   update:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 150
     steps:
       # 保存の直後に複数回起動された場合でも、常に最新の main で集計する
       - uses: actions/checkout@v4

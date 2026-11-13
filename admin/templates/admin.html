@@ -20,10 +20,11 @@
 <nav id="tabs">
   <button data-tab="dash" class="active">状況・再集計</button>
   <button data-tab="updates">アップデート日時</button>
-  <button data-tab="resident">常駐リスト</button>
+  <button data-tab="judge">常設の判定</button>
   <button data-tab="limited">限定ドロップ</button>
   <button data-tab="lastdrop">最終ドロップ</button>
   <button data-tab="history">更新履歴</button>
+  <button data-tab="resident">Wiki（参考）</button>
 </nav>
 <div id="toast"></div>
 <main>
@@ -50,6 +51,17 @@
     </div>
   </div>
   <div class="card">
+    <h2>常設を判定する期間</h2>
+    <p class="note">poi の記録を何か月分さかのぼって常設かどうかを判定するかです。長くすると判定は確かになりますが、初回の集計で過去の月を少しずつ（1 回 4 か月分）取り込むため、全部そろうまで数回の自動更新がかかります。変更はその場で保存されます。</p>
+    <div class="row">
+      <select id="histMonths">
+        <option value="3">3 か月</option><option value="6">6 か月</option><option value="12">12 か月</option>
+        <option value="24">24 か月</option><option value="36">36 か月</option><option value="48">48 か月</option>
+      </select>
+      <span id="histMonthsNow" class="note"></span>
+    </div>
+  </div>
+  <div class="card">
     <h2>再集計</h2>
     <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 05:07〜09:07 に毎時 1 回と、設定の保存時にも自動で実行されます。</p>
     <button class="btn primary" id="rerunBtn">今すぐ再集計する</button>
@@ -73,8 +85,8 @@
 
 <section id="tab-resident">
   <div class="card">
-    <h2>常駐リスト</h2>
-    <p class="note">艦名は「、」区切りで入力します。各マスの下には、3 日以上ドロップしていない艦（または記録がない艦）と最終ドロップ日を赤で出します。ここに無い艦が poi で観測されると限定ドロップとして掲載されます。</p>
+    <h2>Wiki 出撃ドロップ（参考）</h2>
+    <p class="note">艦これ攻略Wiki「出撃ドロップ」の常駐（青字以外）の写しです。<strong>公開ページの常設・限定の判定には使っていません</strong>（判定は「常設の判定」タブ、poi の記録で行います）。「常設の判定」タブで Wiki と食い違うものを確かめるためだけに使います。艦名は「、」区切りで入力します。各マスの下には、3 日以上ドロップしていない艦（または記録がない艦）と最終ドロップ日を赤で出します。</p>
     <div class="row">
       <select id="resMap"></select>
       <button class="btn" id="resAddNode">マスを追加</button>
@@ -83,33 +95,68 @@
       <span id="resWarn" class="warn"></span>
     </div>
     <div class="scroll"><table class="grid" id="resTable"></table></div>
-    <div class="actions"><button class="btn primary save" data-save="resident">保存して再集計</button><span class="unsaved">未保存の変更があります。保存するまで反映されません。</span></div>
-  </div>
-  <div class="card">
-    <h2>出撃ドロップに無いが、常設として公開しているもの</h2>
-    <p class="note">出撃ドロップ（Wiki）には載っていませんが、保存している<strong>すべての月</strong>で 1 回以上ドロップしているため、公開ページでは常設として載せています。<span id="autoMonths"></span>限定ページで継続中の艦（イベントの表で取消線が付いていない艦を含む）は対象外です。出撃ドロップの青字は使っていません。最終ドロップが 3 日以上前のものは赤字になります。「限定ページとの照合」は、艦これ攻略Wiki「期間限定ドロップイベント」に同じ海域・マス・艦が載っているかです。載っていれば、過去の限定ドロップがまだ続いているか、終わった限定の可能性があります。限定に戻したいものは「常設から外す」を押してください（その場で保存）。</p>
-    <div class="row"><input type="text" id="autoResFilter" placeholder="絞り込み（海域・艦名）" class="grow">
-      <label class="check"><input type="checkbox" id="autoResOnlyHit"> 限定ページに記載があるものだけ</label>
-      <span id="autoResCount" class="note"></span></div>
-    <p class="note warnline" id="autoResHit"></p>
-    <div class="scroll tall"><table class="list" id="autoResTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>ドロップ数 / 戦闘数</th><th>最終ドロップ</th><th>限定ページとの照合</th><th></th></tr></thead><tbody></tbody></table></div>
-    <h2 style="margin-top:16px">常設から外したもの</h2>
-    <table class="list" id="autoOffTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
+    <div class="actions"><button class="btn primary save" data-save="resident">保存</button><span class="unsaved">未保存の変更があります。保存するまで反映されません。</span></div>
   </div>
   <div class="card">
     <h2>Wiki との差分を確認</h2>
-    <p class="note">艦これ Wiki「出撃ドロップ」ページをブラウザで保存した HTML を選ぶと、青字（期間限定）以外を常駐として読み取り、現在の常駐リストとの差分を表示します。反映は上の表で手入力してください。ファイルはこのブラウザ内で解析され、サーバーには送信されません。</p>
+    <p class="note">艦これ Wiki「出撃ドロップ」ページをブラウザで保存した HTML を選ぶと、青字（期間限定）以外を常駐として読み取り、上の表との差分を表示します。反映は上の表で手入力してください。ファイルはこのブラウザ内で解析され、サーバーには送信されません。</p>
     <input type="file" id="wikiFile" accept=".html,.htm,text/html">
     <div id="wikiDiff"></div>
+  </div>
+</section>
+
+<section id="tab-judge">
+  <div class="card">
+    <h2>常設の判定</h2>
+    <p class="note">poi の記録だけで、各マスの艦が常設かどうかを判定しています（<span id="jgMonths"></span>）。週ごとに「そのマスの戦闘数 × その艦の出る率」から出るはずの回数を出し、<strong>8 回以上は出るはずの期間に 1 回も出ていなければ</strong>「出ていない」とみなします。</p>
+    <ul class="legend">
+      <li><span class="tag ok">全期間で出ている</span>判定期間のはじめから今まで出ている → 常設</li>
+      <li><span class="tag ok">途中から出始め、定着</span>途中から出始めて 60 日以上続いている → 常設</li>
+      <li><span class="tag wait">最近出始めた</span>出始めて 60 日未満 → アップデート日時以降に出ていれば限定</li>
+      <li><span class="tag ng">出なくなった</span>最近は出ていない → 常設から外れる（限定が終わった、または常設が外された）</li>
+      <li><span class="tag wait">断続的</span>途中に出ていない期間がある → 限定扱い</li>
+      <li><span class="tag ng">誤報告の疑い</span>戦闘 2,000 回以上で 2 件以下</li>
+      <li><span class="tag">期間内に出ていない</span>Wiki の出撃ドロップにはあるが、判定期間に 1 回も出ていない</li>
+    </ul>
+    <p class="note">期間限定ドロップイベントのページで<strong>継続中</strong>になっている艦は、データに関係なく限定です。ページで終了済みなのにその後も出続けている艦は常設になります。判定が違うときは「常設にする」「常設から外す」を押してください（その場で保存され、再集計が始まります）。</p>
+    <div id="jgSummary" class="jg-sum"></div>
+    <div class="row">
+      <input type="text" id="jgFilter" placeholder="絞り込み（例: 1-3-J / 大井）" class="grow">
+      <select id="jgView">
+        <option value="check">要確認（Wiki と食い違う・出なくなった）</option>
+        <option value="wikinot">Wiki では常駐だが常設にしていない</option>
+        <option value="notwiki">Wiki に無いが常設にしている</option>
+        <option value="stopped">出なくなった</option>
+        <option value="pub常設">公開: 常設</option>
+        <option value="pub限定">公開: 限定</option>
+        <option value="pub1隻報告">公開: 1隻報告（非掲載）</option>
+        <option value="pubnone">公開していない</option>
+        <option value="all">すべて</option>
+      </select>
+      <select id="jgSort">
+        <option value="place">海域・マス順</option>
+        <option value="last">最終ドロップが古い順</option>
+        <option value="drops">ドロップ数が多い順</option>
+        <option value="ship">艦名順</option>
+      </select>
+    </div>
+    <div id="jgCount" class="note"></div>
+    <div class="scroll tall big"><table class="list" id="jgTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>データの判定</th><th>公開</th><th>ドロップ / 戦闘</th><th>初ドロップ</th><th>最終ドロップ</th><th>Wiki</th><th>限定ページ</th><th></th></tr></thead><tbody></tbody></table></div>
+  </div>
+  <div class="card">
+    <h2>手動で常設にしたもの</h2>
+    <table class="list" id="forceTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
+    <h2 style="margin-top:16px">手動で常設から外したもの</h2>
+    <table class="list" id="autoOffTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>最終ドロップ</th><th></th></tr></thead><tbody></tbody></table>
   </div>
 </section>
 
 <section id="tab-limited">
   <div class="card">
     <h2>自動検出された限定ドロップ</h2>
-    <p class="note">poi で観測され、常駐リストに無い艦です（公開中のデータ時点）。「限定ページのイベント」は、艦これ攻略Wiki「期間限定ドロップイベント」で同じ海域・マス・艦が載っているイベントです（継続中を先に、新しい順）。誤りなら「除外」、常駐なら「常駐へ」を押してください。「除外」はその場で保存され、数分後に公開ページへ反映されます。</p>
+    <p class="note">常設ではなく、アップデート日時以降に poi で出ている艦です（公開中のデータ時点）。「理由」は、限定ページで継続中になっているから限定なのか、データで常設と言えないから限定なのかです。「限定ページのイベント」は、艦これ攻略Wiki「期間限定ドロップイベント」で同じ海域・マス・艦が載っているイベントです（継続中を先に、新しい順）。誤りなら「除外」、常設なら「常設にする」を押してください（その場で保存され、数分後に公開ページへ反映）。</p>
     <div class="row"><input type="text" id="limFilter" placeholder="絞り込み（海域・艦名）" class="grow"></div>
-    <div class="scroll tall"><table class="list" id="autoTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>報告</th><th>最終ドロップ</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table></div>
+    <div class="scroll tall"><table class="list" id="autoTable"><thead><tr><th>海域</th><th>マス</th><th>艦名</th><th>ドロップ率</th><th>報告</th><th>理由</th><th>最終ドロップ</th><th>限定ページのイベント</th><th></th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card">
     <h2>⚠ 1隻報告（掲載していないもの）</h2>
@@ -141,10 +188,9 @@
     <h2>最終ドロップ</h2>
     <p class="note">poi の記録に出てくる「海域・マス・艦」の全組み合わせについて、最後にドロップした日時とドロップ数を出します（日本時間、S/A/B 勝利）。<span id="ldRange"></span></p>
     <ul class="legend">
-      <li><span class="tag">常設</span>出撃ドロップ（Wiki）に載っている。公開ページに掲載。</li>
-      <li><span class="tag ok">常設（全月）</span>出撃ドロップには無いが、全ての月で出ているので常設として掲載。</li>
+      <li><span class="tag">常設</span>データで常設と判定（または手動で常設）。公開ページに掲載。</li>
       <li><span class="tag wait">限定</span>常設ではなく、最新のアップデート日時以降に出ている。公開ページに掲載。</li>
-      <li><span class="tag ng">どちらでもない</span>常設でも限定でもなく、限定ページでも継続中になっていない。公開ページには載せていない（過去の限定など）。</li>
+      <li><span class="tag ng">どちらでもない</span>常設でも限定でもない（過去の限定、出なくなった艦など）。公開ページには載せていない。</li>
       <li><span class="tag ng">継続中だが未確認</span>限定ページでは継続中だが、最新のアップデート以降は出ていない。公開ページには載せていない。</li>
       <li><span class="tag">1隻報告</span>報告 1 件だけのため載せていない（「限定ドロップ」タブで復元できます）。</li>
     </ul>
@@ -156,7 +202,6 @@
         <option value="single">1隻報告</option>
         <option value="limited">限定</option>
         <option value="normal">常設</option>
-        <option value="auto">常設（全月）</option>
         <option value="all">すべて</option>
       </select>
       <select id="ldSort">

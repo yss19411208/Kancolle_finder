@@ -3,7 +3,7 @@
 const TYPES = ['戦艦級', '航空母艦', '重巡級', '軽巡級', '駆逐艦', '海防艦', '潜水艦', '補助艦艇'];
 const CSRF = document.querySelector('meta[name=csrf]').content;
 const $ = id => document.getElementById(id);
-const S = { config: null, resident: null, history: null, drop: null, master: null, routes: null, log: null, lastdrop: null, limpage: null, sha: {} };
+const S = { config: null, resident: null, history: null, drop: null, master: null, routes: null, log: null, lastdrop: null, limpage: null, judge: null, sha: {} };
 const dirty = new Set();
 
 // ---------------------------------------------------------------- 共通
@@ -92,10 +92,10 @@ function canon(name) { return nameByNorm[norm(name)] || name.trim(); }
 
 // ---------------------------------------------------------------- 読み込み
 async function loadAll() {
-  const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes', 'log', 'lastdrop', 'limpage'];
+  const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes', 'log', 'lastdrop', 'limpage', 'judge'];
   const res = await Promise.all(keys.map(k => api('/api/file/' + k)));
   keys.forEach((k, i) => { S[k] = res[i].content; S.sha[k] = res[i].sha; });
-  S.config = Object.assign({ updates: [], limited_manual: [], limited_exclude: [], limited_keep: [], auto_resident_exclude: [] }, S.config || {});
+  S.config = Object.assign({ updates: [], limited_manual: [], limited_exclude: [], limited_keep: [], auto_resident_exclude: [], resident_force: [], history_months: 12 }, S.config || {});
   delete S.config.end_dates;   // 終了日の機能は廃止
   S.resident = S.resident || {};
   S.history = Array.isArray(S.history) ? S.history : [];
@@ -110,7 +110,7 @@ async function loadAll() {
   renderAll();
 }
 function renderAll() {
-  renderDash(); renderLog(); renderUpdates(); fillMapSelects(); renderResident(); renderAutoResident(); renderLimited(); renderLastDrop(); renderHistory();
+  renderDash(); renderLog(); renderUpdates(); fillMapSelects(); renderResident(); renderJudge(); renderLimited(); renderLastDrop(); renderHistory();
 }
 
 // ---------------------------------------------------------------- 保存
@@ -123,8 +123,8 @@ async function save(key, btn) {
     S.sha[key] = r.sha;
     setDirty(key, false);
     setState(`保存しました ${clock()}`);
-    toast(key === 'history' ? '保存しました' : '保存しました。再集計が自動で始まります（数分後に公開ページへ反映）');
-    if (key !== 'history') watchRuns();
+    toast(key === 'config' ? '保存しました。再集計が自動で始まります（数分後に公開ページへ反映）' : '保存しました');
+    if (key === 'config') watchRuns();
   } catch (e) {
     toast(e.message, true);
   } finally {
@@ -143,10 +143,14 @@ function renderDash() {
     ['最終集計', d.generated || '未実行'],
     ['集計対象の報告', d.records ? `${d.records.toLocaleString()} 件（${d.data_from || '?'} ～ ${d.data_to || '?'}）` : 'なし'],
     ['有効なアップデート日時', d.cutoff || 'なし（全期間）'],
+    ['常設の判定期間', ((S.judge || {}).months || []).length ? `${S.judge.months[0]} 〜 ${S.judge.months[S.judge.months.length - 1]}（設定 ${S.config.history_months} か月）` : 'なし'],
     ['限定ドロップ', `${nLim} 件（うち手動 ${nMan} 件）`],
     ['海域数', Object.keys(d.maps || {}).length],
   ];
   $('rateMode').value = S.config.rate_mode || 'node_s';
+  $('histMonths').value = String(S.config.history_months || 12);
+  const jm = (S.judge || {}).months || [];
+  $('histMonthsNow').textContent = jm.length ? `いま判定に使えている月: ${jm[0]} 〜 ${jm[jm.length - 1]}（${jm.length} か月）` : '';
   $('dashInfo').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, String(v))]));
 }
 // ---------------------------------------------------------------- データ更新の記録
@@ -187,7 +191,7 @@ function renderLog() {
 let ldRows = null;
 function buildLdRows() {
   const kind = {};
-  for (const [m, nodes] of Object.entries((S.drop || {}).maps || {})) for (const [node, v] of Object.entries(nodes)) for (const r of v.ships) kind[`${m}|${node}|${r[0]}`] = r[2] ? 'limited' : r[7] === 'data' ? 'auto' : 'normal';
+  for (const [m, nodes] of Object.entries((S.drop || {}).maps || {})) for (const [node, v] of Object.entries(nodes)) for (const r of v.ships) kind[`${m}|${node}|${r[0]}`] = r[2] ? 'limited' : 'normal';
   for (const [m, node, ship] of (S.drop || {}).single_hidden || []) kind[`${m}|${node}|${ship}`] = 'single';
   const ongoing = (S.limpage || {}).ongoing || {};   // 限定ページで継続中 (海域 -> 艦)
   const rows = [];
@@ -216,7 +220,7 @@ function drawLastDrop() {
   rows.sort(cmp);
   const MAX = 500, now = Date.now();
   $('ldCount').textContent = `${rows.length.toLocaleString()} 件` + (rows.length > MAX ? `（先頭 ${MAX} 件を表示。絞り込むと残りも見られます）` : '');
-  const label = { limited: ['限定', 'wait'], normal: ['常設', ''], auto: ['常設（全月）', 'ok'], none: ['どちらでもない', 'ng'], page: ['継続中だが未確認', 'ng'], single: ['1隻報告', ''] };
+  const label = { limited: ['限定', 'wait'], normal: ['常設', ''], none: ['どちらでもない', 'ng'], page: ['継続中だが未確認', 'ng'], single: ['1隻報告', ''] };
   $('ldTable').tBodies[0].replaceChildren(...rows.slice(0, MAX).map(r => {
     const h = (now - r.t) / 3600e3;
     const ago = h < 48 ? `${Math.max(0, Math.round(h))}時間前` : `${Math.floor(h / 24)}日前`;
@@ -257,9 +261,9 @@ function watchRuns() {
       clearInterval(watchTimer);
       if (seenRunning) {
         try {
-          const [r, l, d] = await Promise.all([api('/api/file/drop'), api('/api/file/log'), api('/api/file/lastdrop')]);
-          S.drop = r.content; S.log = l.content; S.lastdrop = d.content;
-          renderDash(); renderLog(); renderAutoResident(); renderLimited(); renderLastDrop();
+          const [r, l, d, j] = await Promise.all(['drop', 'log', 'lastdrop', 'judge'].map(k => api('/api/file/' + k)));
+          S.drop = r.content; S.log = l.content; S.lastdrop = d.content; S.judge = j.content;
+          renderDash(); renderLog(); renderJudge(); renderLimited(); renderLastDrop();
           toast('再集計が終わりました。公開ページには 1〜2 分で反映されます');
         } catch (e) { /* 次の「最新に更新」で読み直す */ }
       }
@@ -312,37 +316,74 @@ function renderResident() {
   $('resTable').dataset.map = m;
   checkResidentNames();
 }
-// 出撃ドロップに無いが、全月で出ているので常設として公開しているもの
-function renderAutoResident() {
-  const off = S.config.auto_resident_exclude;
-  const q = $('autoResFilter').value;
-  const all = [];
-  for (const [m, nodes] of Object.entries((S.drop || {}).maps || {})) for (const [node, v] of Object.entries(nodes)) for (const r of v.ships) {
-    if (r[7] === 'data') {
-      const ld = (((S.lastdrop || {}).maps || {})[m] || {})[node] || {};
-      const v = ld[r[0]];
-      all.push({ map: m, node, ship: r[0], rate: r[3], drops: r[4], n: r[5], last: Array.isArray(v) ? v[0] : (v || ''),
-                 ev: limitedEvents(m, node, r[0]) });
-    }
-  }
-  all.sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'));
-  const onlyHit = $('autoResOnlyHit').checked;
-  const rows = all.filter(a => !off.some(e => same(e, a))).filter(a => matchQ(norm(`${a.map}-${a.node} ${a.ship}`), q))
-    .filter(a => !onlyHit || a.ev.length);
-  $('autoResHit').textContent = `限定ページに記載があるもの: ${all.filter(a => !off.some(e => same(e, a)) && a.ev.length).length} 件`;
-  const jm = (S.drop || {}).judge_months || [];
-  $('autoMonths').textContent = jm.length ? `判定に使っている月: ${jm.join('、')}。` : '';
-  $('autoResCount').textContent = `${rows.length} 件`;
-  $('autoResTable').tBodies[0].replaceChildren(...(rows.length ? rows.map(a => el('tr', {},
-    el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
-    el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
-    el('td', { class: 'num' }, `${Number(a.drops).toLocaleString()} / ${Number(a.n).toLocaleString()}`),
-    lastCell(a.map, a.node, a.ship),
-    evCell(a.ev, '記載なし'),
-    el('td', {}, el('button', { class: 'btn small', on: { click: () => { off.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設(全月)から外す ${a.map}-${a.node} ${a.ship}`); renderAutoResident(); } } }, '常設から外す')))) : [el('tr', {}, el('td', { colSpan: 8 }, '該当なし'))]));
-  $('autoOffTable').tBodies[0].replaceChildren(...(off.length ? off.map(e => el('tr', {},
+// ---------------------------------------------------------------- 常設の判定 (data/judge.json)
+const JG_CLASS = { continuous: 'ok', added: 'ok', new: 'wait', stopped: 'ng', intermittent: 'wait', misreport: 'ng', none: '' };
+const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み・その後も出ている', manual: '手動で常設', page: '限定ページで継続中', auto: '' };
+let jgRows = [];
+function renderJudge() {
+  const j = S.judge || { columns: [], rows: [], labels: {} };
+  const cols = j.columns || [];
+  jgRows = (j.rows || []).map(r => { const o = Object.fromEntries(cols.map((c, i) => [c, r[i]])); o.key = norm(`${o.map}-${o.node} ${o.ship}`); return o; });
+  $('jgMonths').textContent = (j.months || []).length ? `対象: ${j.months[0]} 〜 ${j.months[j.months.length - 1]}、${j.generated} 時点` : 'まだ判定結果がありません。次の集計で作られます';
+  const cnt = (f) => jgRows.filter(f).length;
+  const pub = r => r.published === '常設';
+  const items = [
+    ['常設として公開', cnt(pub)], ['限定として公開', cnt(r => r.published === '限定')],
+    ['Wiki では常駐だが常設にしていない', cnt(r => r.wiki && !pub(r))], ['Wiki に無いが常設にしている', cnt(r => !r.wiki && pub(r))],
+    ['出なくなった', cnt(r => r.class === 'stopped')],
+  ];
+  $('jgSummary').replaceChildren(...items.map(([k, v]) => el('div', {}, el('b', {}, Number(v).toLocaleString()), el('span', {}, k))));
+  drawJudge();
+  renderOverrides();
+}
+function drawJudge() {
+  const j = S.judge || {}, labels = j.labels || {};
+  const q = $('jgFilter').value, view = $('jgView').value, sort = $('jgSort').value;
+  const pub = r => r.published === '常設';
+  const f = {
+    check: r => (r.wiki && !pub(r)) || (!r.wiki && pub(r)) || r.class === 'stopped',
+    wikinot: r => r.wiki && !pub(r), notwiki: r => !r.wiki && pub(r), stopped: r => r.class === 'stopped',
+    pubnone: r => !r.published, all: () => true,
+  }[view] || (r => r.published === view.slice(3));
+  const rows = jgRows.filter(r => f(r) && matchQ(r.key, q));
+  const cmp = {
+    place: (a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'),
+    last: (a, b) => (a.last || '').localeCompare(b.last || '') || mapCmp(a.map, b.map),
+    drops: (a, b) => b.drops - a.drops,
+    ship: (a, b) => a.ship.localeCompare(b.ship, 'ja') || mapCmp(a.map, b.map) || nodeCmp(a.node, b.node),
+  }[sort];
+  rows.sort(cmp);
+  const MAX = 400;
+  $('jgCount').textContent = `${rows.length.toLocaleString()} 件` + (rows.length > MAX ? `（先頭 ${MAX} 件を表示。絞り込むと残りも見られます）` : '');
+  const force = S.config.resident_force, off = S.config.auto_resident_exclude;
+  $('jgTable').tBodies[0].replaceChildren(...(rows.length ? rows.slice(0, MAX).map(r => {
+    const a = { map: r.map, node: r.node, ship: r.ship };
+    const forced = force.some(e => same(e, a)), offed = off.some(e => same(e, a));
+    let btn;
+    if (forced) btn = el('span', { class: 'tag' }, '手動で常設');
+    else if (offed) btn = el('span', { class: 'tag' }, '外す設定済み');
+    else if (r.published === '常設') btn = el('button', { class: 'btn small', on: { click: () => { off.push(a); markDirty('config', `常設から外す ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設から外す');
+    else btn = el('button', { class: 'btn small', on: { click: () => { force.push(a); markDirty('config', `常設にする ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設にする');
+    const why = JG_WHY[r.why] || '';
+    return el('tr', {},
+      el('td', {}, r.map), el('td', {}, r.node), el('td', {}, r.ship),
+      el('td', {}, el('span', { class: 'tag ' + (JG_CLASS[r.class] || '') }, labels[r.class] || r.class || '—')),
+      el('td', {}, r.published ? el('span', { class: 'tag ' + (r.published === '常設' ? '' : r.published === '限定' ? 'wait' : 'ng') }, r.published) : '—',
+        why ? el('div', { class: 'sub' }, why) : null),
+      el('td', { class: 'num' }, `${Number(r.drops).toLocaleString()} / ${Number(r.battles).toLocaleString()}`),
+      el('td', { class: 'num' }, r.first || '—'),
+      lastCell(r.map, r.node, r.ship),
+      el('td', {}, r.wiki ? '常駐' : '—'),
+      evCell(limitedEvents(r.map, r.node, r.ship), '記載なし'),
+      el('td', {}, btn));
+  }) : [el('tr', {}, el('td', { colSpan: 11 }, '該当なし'))]));
+}
+function renderOverrides() {
+  const table = (id, list, label, what) => $(id).tBodies[0].replaceChildren(...(list.length ? list.map(e => el('tr', {},
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), lastCell(e.map, e.node, e.ship),
-    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { off.splice(off.indexOf(e), 1); markDirty('config', `常設(全月)に戻す ${e.map}-${e.node} ${e.ship}`); renderAutoResident(); } } }, '常設に戻す')))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { list.splice(list.indexOf(e), 1); markDirty('config', `${what} ${e.map}-${e.node} ${e.ship}`); renderJudge(); renderLimited(); } } }, label)))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
+  table('forceTable', S.config.resident_force, '取り消し', '手動の常設を取り消し');
+  table('autoOffTable', S.config.auto_resident_exclude, '取り消し', '常設から外すのを取り消し');
 }
 // 常駐の各艦の最終ドロップ。3 日以上出ていない / 記録がない艦だけを赤で出す (全部は多すぎるため)
 function residentLast(map, node, names) {
@@ -448,7 +489,7 @@ function showWikiDiff(wiki) {
 function autoLimited() {
   const out = [];
   for (const [m, nodes] of Object.entries((S.drop || {}).maps || {})) for (const [node, v] of Object.entries(nodes)) for (const r of v.ships) {
-    if (r[2] && r[7] === 'auto') out.push({ map: m, node, ship: r[0], ti: r[1], rate: r[3], drops: r[4], n: r[5] });
+    if (r[2] && r[7] !== 'manual') out.push({ map: m, node, ship: r[0], ti: r[1], rate: r[3], drops: r[4], n: r[5], why: r[7] });
   }
   return out.sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'));
 }
@@ -510,13 +551,14 @@ function renderLimited() {
       el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
       el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
       el('td', { class: 'num' }, `${a.drops} / ${a.n}`),
+      el('td', {}, a.why === 'page' ? '限定ページで継続中' : judgeLabel(a.map, a.node, a.ship)),
       lastCell(a.map, a.node, a.ship),
       evCell(limitedEvents(a.map, a.node, a.ship), '限定ページに記載なし'),
       el('td', {}, excluded ? el('span', { class: 'tag' }, '除外予定') : [
         el('button', { class: 'btn small', on: { click: () => { ex.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `限定から除外 ${a.map}-${a.node} ${a.ship}`); renderLimited(); } } }, '除外'), ' ',
-        el('button', { class: 'btn small', on: { click: () => toResident(a) } }, '常駐へ')]));
+        el('button', { class: 'btn small', on: { click: () => { S.config.resident_force.push({ map: a.map, node: a.node, ship: a.ship }); markDirty('config', `常設にする ${a.map}-${a.node} ${a.ship}`); renderLimited(); renderJudge(); } } }, '常設にする')]));
   });
-  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 8 }, '該当なし'))]));
+  $('autoTable').tBodies[0].replaceChildren(...(rows.length ? rows : [el('tr', {}, el('td', { colSpan: 9 }, '該当なし'))]));
 
   // 1 隻報告で載せていないもの / 復元したもの
   const keepList = S.config.limited_keep;
@@ -539,18 +581,12 @@ function renderLimited() {
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), lastCell(e.map, e.node, e.ship),
     el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config', `除外を解除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '解除')))) : [el('tr', {}, el('td', { colSpan: 5 }, 'なし'))]));
 }
-function toResident(a) {
-  readResidentTable();
-  const m = S.resident[a.map] = S.resident[a.map] || {};
-  const cols = m[a.node] = m[a.node] || TYPES.map(() => []);
-  if (!cols[a.ti].some(n => norm(n) === norm(a.ship))) cols[a.ti].push(a.ship);
-  markDirty('resident');
-  fillMapSelects();
-  $('resMap').value = a.map;
-  renderResident();
-  toast(`${a.map}-${a.node} の常駐リストに ${a.ship} を追加しました。「常駐リスト」タブで保存してください`);
+// データの判定 (常設にならなかった理由) を短く
+function judgeLabel(map, node, ship) {
+  const r = jgRows.find(r => r.map === map && r.node === node && norm(r.ship) === norm(ship));
+  if (!r) return '';
+  return `データ: ${((S.judge || {}).labels || {})[r.class] || r.class}`;
 }
-
 // ---------------------------------------------------------------- 更新履歴
 function renderHistory() {
   const box = $('histList');
@@ -617,8 +653,11 @@ $('wikiFile').addEventListener('change', async e => {
   try { showWikiDiff(parseWiki(await f.text())); } catch (err) { toast('解析に失敗しました: ' + err.message, true); }
 });
 $('limFilter').addEventListener('input', renderLimited);
-$('autoResFilter').addEventListener('input', renderAutoResident);
-$('autoResOnlyHit').addEventListener('change', renderAutoResident);
+['jgFilter', 'jgView', 'jgSort'].forEach(id => $(id).addEventListener(id === 'jgFilter' ? 'input' : 'change', drawJudge));
+$('histMonths').addEventListener('change', e => {
+  S.config.history_months = Number(e.target.value);
+  markDirty('config', `常設を判定する期間を ${e.target.value} か月に変更`);
+});
 ['ldFilter', 'ldKind', 'ldSort'].forEach(id => $(id).addEventListener(id === 'ldFilter' ? 'input' : 'change', drawLastDrop));
 $('manAdd').addEventListener('click', () => {
   const e = { map: $('manMap').value, node: $('manNode').value.trim(), ship: canon($('manShip').value), added: fmt(new Date()) };
