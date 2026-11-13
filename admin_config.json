@@ -18,6 +18,11 @@
       "map": "3-1",
       "node": "G",
       "ship": "天霧"
+    },
+    {
+      "map": "1-4",
+      "node": "H",
+      "ship": "曙"
     }
   ],
   "limited_keep": [],
