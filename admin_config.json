@@ -48,7 +48,13 @@
       "ship": "瑞穂"
     }
   ],
-  "auto_resident_exclude": [],
+  "auto_resident_exclude": [
+    {
+      "map": "2-5",
+      "node": "O",
+      "ship": "秋雲"
+    }
+  ],
   "resident_force": [],
   "history_months": 36
 }
