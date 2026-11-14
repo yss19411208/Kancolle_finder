@@ -1,0 +1,26 @@
+{
+ "fetched_at": 1794675753,
+ "ok": true,
+ "source": "wiki",
+ "got_at": 1794675753,
+ "page": {
+  "events": 74,
+  "entries": 438,
+  "ongoing": 25
+ },
+ "files": {
+  "current.html": {
+   "archive": false,
+   "events": 45,
+   "ongoing": 25
+  },
+  "archive.html": {
+   "archive": true,
+   "events": 29,
+   "ongoing": 0
+  }
+ },
+ "message": "Wiki から取得しました（イベント 45 件・継続中一覧 25 海域）",
+ "message_at": 1794675753,
+ "changed_at": 1794675753
+}
