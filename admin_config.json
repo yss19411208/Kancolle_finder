@@ -5,7 +5,14 @@
       "note": "ハロウィンイベ終了&サンマイベ前"
     }
   ],
-  "limited_manual": [],
+  "limited_manual": [
+    {
+      "added": "2026/11/14 14:06:21",
+      "map": "1-4",
+      "node": "L",
+      "ship": "利根"
+    }
+  ],
   "limited_exclude": [
     {
       "map": "1-4",
