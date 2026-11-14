@@ -2,8 +2,10 @@ name: データ更新
 
 on:
   schedule:
-    # 毎日 05:07〜09:07 (日本時間) に毎時 1 回。poi のダンプは 1 日 1 回 (01 時ごろ) 作られる。
-    # GitHub の定時実行は遅れたり飛ばされたりするので複数回起動し、ダンプが前回と同じなら数秒で終わる
+    # poi のダンプは毎日 01:00 ごろ (日本時間) に作られるので、01:37 と 02:37 に取りに行く。
+    # 予備として 05:07〜09:07 にも毎時 1 回。GitHub の定時実行は遅れたり飛ばされたりするため。
+    # ダンプが前回と同じなら数秒で終わる
+    - cron: "37 16,17 * * *"
     - cron: "7 20-23 * * *"
     - cron: "7 0 * * *"
   workflow_dispatch:         # 手動実行 / 管理画面の「再集計」ボタン
@@ -13,7 +15,10 @@ on:
       - admin_config.json
       - Normal_Drop_Ship.json
       - scripts/update.py          # 集計のプログラムを直したときも、すぐ作り直す
-      - data/limited_page.json
+      - scripts/parse_limited_page.py
+      - data/limited_extra.json
+      - data/limited_src/current.html   # 管理画面から限定ページの HTML を送ったとき
+      - data/limited_src/archive.html
 
 permissions:
   contents: write
@@ -50,6 +55,12 @@ jobs:
 
       - run: pip install --quiet -r scripts/requirements.txt
 
+      # 艦これ攻略Wiki「期間限定ドロップイベント」を取得して data/limited_page.json を作り直す。
+      # 定時実行では 1 日 1 回だけ取りに行く。取れなくても保存済みのページで続ける
+      - name: 限定ページ (Wiki) を取得
+        continue-on-error: true
+        run: python scripts/fetch_limited_page.py ${{ github.event_name == 'workflow_dispatch' && '--force' || (github.event_name == 'push' && '--no-fetch' || '') }}
+
       - name: ダンプを取得して集計
         id: agg
         run: python scripts/update.py --state-dir state ${{ github.event_name == 'push' && '--smart' || '' }}
@@ -71,8 +82,11 @@ jobs:
             # 集計中に管理画面で保存されるなどして main が進んでいた場合:
             # 生成ファイル同士をマージせず、最新の main に合わせて集計し直す (ダンプは取り直さない)
             echo "main が更新されていたため、最新の設定で集計し直します ($i 回目)"
+            mkdir -p /tmp/limsrc && cp data/limited_src/current.html data/limited_src/status.json /tmp/limsrc/ 2>/dev/null || true
             git fetch --quiet origin main
             git reset --quiet --hard origin/main
+            cp /tmp/limsrc/* data/limited_src/ 2>/dev/null || true   # この実行で Wiki から取ったページは残す
+            python scripts/fetch_limited_page.py --no-fetch || true
             python scripts/update.py --state-dir state --no-download
             sleep $((i * 3))
           done

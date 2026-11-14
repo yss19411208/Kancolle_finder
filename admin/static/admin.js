@@ -232,7 +232,7 @@ function canon(name) { return nameByNorm[norm(name)] || name.trim(); }
 
 // ---------------------------------------------------------------- 読み込み
 async function loadAll() {
-  const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes', 'log', 'lastdrop', 'limpage', 'judge'];
+  const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes', 'log', 'lastdrop', 'limpage', 'judge', 'limstatus'];
   const res = await Promise.all(keys.map(k => api('/api/file/' + k)));
   keys.forEach((k, i) => { S[k] = res[i].content; S.sha[k] = res[i].sha; });
   S.config = Object.assign({ updates: [], limited_manual: [], limited_exclude: [], limited_keep: [], auto_resident_exclude: [], resident_force: [], history_months: 12 }, S.config || {});
@@ -250,7 +250,7 @@ async function loadAll() {
   renderAll();
 }
 function renderAll() {
-  renderDash(); renderLog(); renderUpdates(); fillMapSelects(); renderResident(); renderJudge(); renderLimited(); renderLastDrop(); renderHistory();
+  renderDash(); renderLog(); renderUpdates(); fillMapSelects(); renderResident(); renderJudge(); renderLimited(); renderLimStatus(); renderLastDrop(); renderHistory();
 }
 
 // ---------------------------------------------------------------- 保存
@@ -731,6 +731,37 @@ function renderLimited() {
     el('td', {}, e.map), el('td', {}, e.node), el('td', {}, e.ship), lastCell(e.map, e.node, e.ship),
     el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config', `除外を解除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '解除'))));
 }
+// ---------------------------------------------------------------- 限定ページ (Wiki) の取得状況と HTML の送信
+function renderLimStatus() {
+  const st = S.limstatus || {}, pg = st.page || (S.limpage ? { events: (S.limpage.events || []).length, entries: (S.limpage.entries || []).length, ongoing: Object.keys(S.limpage.ongoing || {}).length } : null);
+  const t = x => x ? fmt(new Date(x * 1000)) : '—';
+  const files = st.files || {};
+  const rows = [
+    ['読み取った内容', pg ? `イベント ${pg.events} 件・艦 ${pg.entries} 件・継続中一覧 ${pg.ongoing} 海域` : '—'],
+    ['Wiki から最後に取れた日時', t(st.got_at)],
+    ['最後に取りに行った日時', t(st.fetched_at) + (st.ok === false ? '（失敗）' : '')],
+    ['内容が最後に変わった日時', t(st.changed_at)],
+    ['今のページ', files['current.html'] ? `イベント ${files['current.html'].events} 件・継続中一覧 ${files['current.html'].ongoing} 海域` : 'なし'],
+    ['アーカイブ', files['archive.html'] ? `イベント ${files['archive.html'].events} 件` : 'なし'],
+    ['最後の知らせ', st.message || '—'],
+  ];
+  $('limStatus').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', { class: k === '最後の知らせ' && st.ok === false ? 'warn' : '' }, v)]));
+}
+document.querySelectorAll('input[data-limsrc]').forEach(inp => inp.addEventListener('change', async e => {
+  const f = e.target.files[0], which = e.target.dataset.limsrc;
+  e.target.value = '';
+  if (!f) return;
+  const msg = $('limUploadMsg');
+  msg.textContent = '送信中...';
+  try {
+    const html = await f.text();
+    await api('/api/limsrc/' + which, { html });
+    msg.textContent = `${which === 'current' ? '今のページ' : 'アーカイブ'}を保存しました。数分後に再集計されます。`;
+    toast('限定ページの HTML を保存しました');
+    watchRuns();
+  } catch (err) { msg.textContent = ''; toast(err.message, true); }
+}));
+
 // データの判定 (常設にならなかった理由) を短く
 function judgeLabel(map, node, ship) {
   const r = jgRows.find(r => r.map === map && r.node === node && norm(r.ship) === norm(ship));

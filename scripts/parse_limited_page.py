@@ -1,9 +1,12 @@
-"""艦これ攻略Wiki「期間限定ドロップイベント」をブラウザで保存した HTML から、
+"""艦これ攻略Wiki「期間限定ドロップイベント」の HTML から、
 イベントごとの限定ドロップを読み取り、data/limited_page.json に書き込む。
 
 使い方:  pip install beautifulsoup4 lxml
+         python scripts/parse_limited_page.py                       # data/limited_src/ の HTML から作る
          python scripts/parse_limited_page.py 期間限定ドロップイベント.html [アーカイブ_終了済ドロップ.html ...]
-  (折りたたみは開いた状態で保存したもの。アーカイブのイベントはすべて「終了」として扱う)
+  (アーカイブは折りたたみを開いた状態で保存したもの。アーカイブのイベントはすべて「終了」として扱う)
+  ふだんは GitHub Actions の scripts/fetch_limited_page.py が、Wiki から取得した HTML
+  (data/limited_src/current.html) と、保存済みのアーカイブ (data/limited_src/archive.html) から作る。
 
 data/limited_page.json に足す内容:
   events  : [{"title", "start", "end", "status"}] イベント名・開始日・終了日・継続中/一部継続中/終了
@@ -17,10 +20,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'scripts'))
 from update import norm_name
 
+SRC_DIR = os.path.join(ROOT, 'data', 'limited_src')
 ships = json.load(open(os.path.join(ROOT, 'data', 'ship_master.json'), encoding='utf-8'))
 names = {norm_name(v['name']): v['name'] for v in ships.values()}
-if len(sys.argv) < 2:
-    sys.exit(__doc__)
 
 def grid(tb):
     """rowspan / colspan を展開した表 (td/th の要素の 2 次元配列)"""
@@ -68,7 +70,6 @@ def ships_in(td):
         res.append((n, ended))
     return res
 
-events, entries, ongoing = [], [], {}
 DATE = re.compile(r'(\d{4})/(\d{1,2})/(\d{1,2})')
 
 
@@ -76,8 +77,8 @@ def ymd(m):
     return f"{m.group(1)}/{int(m.group(2)):02d}/{int(m.group(3)):02d}"
 
 
-def parse_file(path):
-    h = open(path, encoding='utf-8', errors='replace').read()
+def parse_file(path, events, entries, ongoing, html=None):
+    h = html if html is not None else open(path, encoding='utf-8', errors='replace').read()
     s = BeautifulSoup(h, 'lxml')
     title_tag = s.title.get_text() if s.title else ''
     archive = 'アーカイブ' in title_tag or '終了済' in title_tag
@@ -131,14 +132,48 @@ def parse_file(path):
         ongoing.clear()
         ongoing.update(found)
     print(f"{os.path.basename(path)}: {'アーカイブ' if archive else '期間限定ドロップイベント'} / イベント {n_ev} 件")
+    return {"archive": archive, "events": n_ev, "ongoing": len(found)}
 
 
-for path in sys.argv[1:]:
-    parse_file(path)
+def build_page(sources):
+    """sources: [(名前, HTML 文字列 または None=ファイルを読む)] から limited_page.json の中身を作る。
+    戻り値: (page, info)  info = 各ファイルの読み取り結果"""
+    events, entries, ongoing, info = [], [], {}, []
+    for path, html in sources:
+        info.append(parse_file(path, events, entries, ongoing, html))
+    add_extra(events, entries)
+    entries = [list(x) for x in dict.fromkeys(tuple(e) for e in entries)]
+    path = os.path.join(ROOT, 'data', 'limited_page.json')
+    page = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
+    page.update({"source": "艦これ攻略Wiki 期間限定ドロップイベント / 終了済アーカイブ",
+                 "events": events, "entries": entries})
+    if ongoing:
+        page["ongoing"] = {k: sorted(set(v)) for k, v in ongoing.items()}
+    return page, info
 
-# Wiki にまだ載っていない分を手で足す (data/limited_extra.json)
-extra_path = os.path.join(ROOT, 'data', 'limited_extra.json')
-if os.path.exists(extra_path):
+
+def save_page(page):
+    path = os.path.join(ROOT, 'data', 'limited_page.json')
+    with open(path, 'w', encoding='utf-8') as f:
+        json.dump(page, f, ensure_ascii=False, separators=(',', ':'))
+        f.write('\n')
+
+
+def default_sources():
+    """data/limited_src/ にある HTML (今のページ → アーカイブ の順)"""
+    out = []
+    for fn in ('current.html', 'archive.html'):
+        p = os.path.join(SRC_DIR, fn)
+        if os.path.exists(p):
+            out.append((p, None))
+    return out
+
+
+def add_extra(events, entries):
+    """Wiki にまだ載っていない分を手で足す (data/limited_extra.json)"""
+    extra_path = os.path.join(ROOT, 'data', 'limited_extra.json')
+    if not os.path.exists(extra_path):
+        return
     for x in json.load(open(extra_path, encoding='utf-8')).get('events', []):
         idx = next((i for i, e in enumerate(events) if e['start'] == x['start']), None)
         if idx is None:
@@ -148,16 +183,15 @@ if os.path.exists(extra_path):
             events[idx]['memo'] = x['memo']
         for mp, node, n in x.get('entries', []):
             entries.append([mp, node, n, idx, 0])
-entries = [list(x) for x in dict.fromkeys(tuple(e) for e in entries)]
-if not events:
-    sys.exit("表を読み取れませんでした。期間限定ドロップのページを保存した HTML か確認してください")
-path = os.path.join(ROOT, 'data', 'limited_page.json')
-page = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
-page.update({"source": "艦これ攻略Wiki 出撃ドロップ / 期間限定ドロップイベント / 終了済アーカイブ",
-             "events": events, "entries": entries})
-if ongoing:
-    page["ongoing"] = {k: sorted(set(v)) for k, v in ongoing.items()}
-with open(path, 'w', encoding='utf-8') as f:
-    json.dump(page, f, ensure_ascii=False, separators=(',', ':'))
-    f.write('\n')
-print('合計: イベント', len(events), '/ 艦', len(entries), '（うち終了', sum(e[4] for e in entries), '）/ 継続中一覧', len(ongoing or page.get('ongoing', {})), '海域')
+
+
+if __name__ == '__main__':
+    srcs = [(p, None) for p in sys.argv[1:]] or default_sources()
+    if not srcs:
+        sys.exit(__doc__)
+    page, _ = build_page(srcs)
+    if not page.get('events'):
+        sys.exit("表を読み取れませんでした。期間限定ドロップのページを保存した HTML か確認してください")
+    save_page(page)
+    print('合計: イベント', len(page['events']), '/ 艦', len(page['entries']), '（うち終了',
+          sum(e[4] for e in page['entries']), '）/ 継続中一覧', len(page.get('ongoing', {})), '海域')

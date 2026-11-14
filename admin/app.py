@@ -50,7 +50,10 @@ SITE_URL = os.environ.get("SITE_URL", f"https://{REPO.split('/')[0]}.github.io/{
 WRITABLE = {"config": "admin_config.json", "resident": "Normal_Drop_Ship.json", "history": "Update.json"}
 READABLE = dict(WRITABLE, drop="Drop_Data.json", master="data/ship_master.json", routes="data/map_routes.json",
                 log="data/update_log.json", lastdrop="data/last_drop.json", limpage="data/limited_page.json",
-                judge="data/judge.json")
+                judge="data/judge.json", limstatus="data/limited_src/status.json")
+# 限定ページ (艦これ攻略Wiki) を保存した HTML の置き場所。送ると GitHub Actions が読み取って再集計する
+LIMSRC = {"current": ("data/limited_src/current.html", "期間限定ドロップイベント"),
+          "archive": ("data/limited_src/archive.html", "アーカイブ")}
 MAX_BODY = 3 * 1024 * 1024
 
 app = Flask(__name__)
@@ -285,6 +288,35 @@ def put_file(key):
         payload["sha"] = body["sha"]
     res = gh("PUT", f"/contents/{path}", payload)
     return jsonify(ok=True, sha=res.get("content", {}).get("sha"))
+
+
+@app.route("/api/limsrc/<which>", methods=["POST"])
+@login_required
+def put_limsrc(which):
+    """限定ページを保存した HTML を受け取って、リポジトリに置く。"""
+    if which not in LIMSRC:
+        abort(404)
+    path, must = LIMSRC[which]
+    body = request.get_json(silent=True) or {}
+    html = body.get("html")
+    if not isinstance(html, str) or len(html) < 1000:
+        return jsonify(error="HTML が空か短すぎます"), 400
+    head = html[:20000]
+    if "期間限定ドロップ" not in head or must not in head or "ドロップ対象" not in html:
+        return jsonify(error=f"艦これ攻略Wiki「{'期間限定ドロップイベント' if which == 'current' else '期間限定ドロップイベント/アーカイブ_終了済ドロップ'}」"
+                             "のページを保存した HTML ではないようです"), 400
+    if which == "current" and "アーカイブ" in (head.split("<title>", 1)[-1].split("</title>", 1)[0]):
+        return jsonify(error="これはアーカイブのページです。「アーカイブのページ」の方から送ってください"), 400
+    payload = {
+        "message": f"管理画面: 限定ページ ({'今のページ' if which == 'current' else 'アーカイブ'}) の HTML を更新",
+        "content": base64.b64encode(html.encode("utf-8")).decode(),
+        "branch": BRANCH,
+    }
+    sha = file_sha(path)
+    if sha:
+        payload["sha"] = sha
+    gh("PUT", f"/contents/{path}", payload)
+    return jsonify(ok=True)
 
 
 @app.route("/api/rerun", methods=["POST"])

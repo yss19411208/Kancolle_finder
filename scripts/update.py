@@ -1315,8 +1315,15 @@ def build_last_drop(states, ships, now):
     return {"months": sorted(states), "maps": maps}
 
 
-def write_update_log(old, new, build, old_build, now, notes):
-    """1 回の集計で何が変わったかを data/update_log.json に残す (管理画面の「データ更新の記録」)。"""
+ROUTINE_NOTES = ("当月ダンプは取得済みのものを使用",)
+
+
+def write_update_log(old, new, build, old_build, now, notes, changed=True):
+    """1 回の集計で何が変わったかを data/update_log.json に残す (管理画面の「データ更新の記録」)。
+    データが何も変わらず、いつもの知らせしか無い実行は記録しない (無駄なコミットを避ける)。"""
+    if not changed and all(n.startswith(ROUTINE_NOTES) for n in notes):
+        log("データの変化なし: 更新の記録は追加しません")
+        return
     on, ol = drop_sets(old)
     nn, nl = drop_sets(new)
     label = lambda s: [f"{m}-{node} {name}" for m, node, name in  # noqa: E731
@@ -1600,19 +1607,28 @@ def main():
         except OSError:
             pass
     drop, judge = build_drop_data(drop_states, cfg, ships, now, wiki)
-    save_json(os.path.join(ROOT, "data", "judge.json"), judge, compact=True)
-    build = build_build_data(build_states, ships, now)
-    append_history(old_drop, drop, now)
-    old_build = load_json(os.path.join(ROOT, "Build_Data.json"))
-    write_update_log(old_drop, drop, build, old_build, now, notes)
-    last = build_last_drop(drop_states, ships, now)
-    if load_json(os.path.join(ROOT, "data", "last_drop.json")) != last:
-        save_json(os.path.join(ROOT, "data", "last_drop.json"), last, compact=True)
-
-    # 中身が変わらない日はファイルを書き換えない (無駄なコミットを避ける)
+    # 中身が変わらない日はファイルを書き換えない (作成日時だけの違いで毎回コミットされるのを避ける)
     def same(a, b):
         strip = lambda d: {k: v for k, v in (d or {}).items() if k != "generated"}  # noqa: E731
         return strip(a) == strip(b)
+
+    if not same(load_json(os.path.join(ROOT, "data", "judge.json")), judge):
+        save_json(os.path.join(ROOT, "data", "judge.json"), judge, compact=True)
+    # 限定ページ (Wiki) の取得結果 (scripts/fetch_limited_page.py) を記録に残す
+    lst = load_json(os.path.join(ROOT, "data", "limited_src", "status.json"), {}) or {}
+    if now - lst.get("changed_at", 0) < 3 * 3600 and lst.get("page"):
+        pg = lst["page"]
+        notes.append(f"限定ページを更新: イベント {pg['events']} 件・艦 {pg['entries']} 件・継続中一覧 {pg['ongoing']} 海域")
+    if now - lst.get("message_at", 0) < 3 * 3600 and lst.get("ok") is False:
+        notes.append(lst.get("message", "限定ページを取得できませんでした"))
+    build = build_build_data(build_states, ships, now)
+    append_history(old_drop, drop, now)
+    old_build = load_json(os.path.join(ROOT, "Build_Data.json"))
+    changed = not same(old_drop, drop) or not same(old_build, build)
+    write_update_log(old_drop, drop, build, old_build, now, notes, changed)
+    last = build_last_drop(drop_states, ships, now)
+    if load_json(os.path.join(ROOT, "data", "last_drop.json")) != last:
+        save_json(os.path.join(ROOT, "data", "last_drop.json"), last, compact=True)
 
     if not same(old_drop, drop):
         save_json(os.path.join(ROOT, "Drop_Data.json"), drop, compact=True)

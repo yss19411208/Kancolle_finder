@@ -200,6 +200,23 @@
     <h2>除外リスト</h2>
     <div class="fill"><table class="list" id="exTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k">艦名</th><th>最終ドロップ</th><th class="k" style="width:5em"></th></tr></thead><tbody></tbody></table></div>
   </div>
+  <div class="card" data-title="限定ページ">
+    <h2>限定ページ（艦これ攻略Wiki）</h2>
+    <p class="note">「限定ドロップ」の判定には、艦これ攻略Wiki「期間限定ドロップイベント」のページで「継続中」になっている艦を使います。このページは GitHub Actions が毎日 1 回 Wiki から取得します（再集計ボタンを押したときも取得します）。取得できなかったときや、ページが明らかに崩れていたときは、前に取れたページのまま使います。</p>
+    <p class="note">自動で取れないときや、アーカイブ（終了済ドロップ）を更新したいときは、ブラウザでページを開いて保存した HTML を下から送ってください。アーカイブは折りたたみを全部開いてから保存してください。送るとその場で保存され、数分後に再集計されます。</p>
+    <div class="split">
+      <div class="col">
+        <h3>今の状態</h3>
+        <dl id="limStatus" class="kv">読み込み中...</dl>
+      </div>
+      <div class="col">
+        <h3>保存した HTML を送る</h3>
+        <div class="row"><label class="file-btn">期間限定ドロップイベントのページ<input type="file" accept=".html,.htm,text/html" data-limsrc="current" hidden></label></div>
+        <div class="row"><label class="file-btn">アーカイブ（終了済ドロップ）のページ<input type="file" accept=".html,.htm,text/html" data-limsrc="archive" hidden></label></div>
+        <p class="sub-note" id="limUploadMsg"></p>
+      </div>
+    </div>
+  </div>
 </section>
 
 <section id="tab-lastdrop">

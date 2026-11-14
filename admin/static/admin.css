@@ -222,3 +222,6 @@ details.help .note{max-width:none}
 header .title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 @media(max-width:640px){header{gap:8px;padding:0 10px}header .title{font-size:15px;letter-spacing:.04em}#saveState{display:none}}
 #drawer dd .reason{display:block;margin:4px 0 0;font-size:13px;color:var(--text)}
+.file-btn{display:inline-block;cursor:pointer;font-weight:700;font-size:13px;padding:6px 14px;border:1px solid var(--navy);border-radius:6px;background:#fff;color:var(--navy)}
+.file-btn:hover{background:var(--navy);color:#fff}
+#limStatus dd.warn{color:#a01818}
