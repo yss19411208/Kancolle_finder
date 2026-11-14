@@ -5,14 +5,7 @@
       "note": "ハロウィンイベ終了&サンマイベ前"
     }
   ],
-  "limited_manual": [
-    {
-      "added": "2026/11/14 00:13:56",
-      "map": "1-4",
-      "node": "L",
-      "ship": "最上"
-    }
-  ],
+  "limited_manual": [],
   "limited_exclude": [
     {
       "map": "1-4",
