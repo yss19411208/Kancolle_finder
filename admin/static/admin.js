@@ -781,6 +781,8 @@ function renderKanlog() {
     ['最後に確かめた日時', t(m.checked_at) + (m.ok === false ? '（失敗あり）' : '')],
     ['取ったページ', Object.keys(pages).length ? `${Object.keys(pages).length - bad.length} / ${Object.keys(pages).length}` + (bad.length ? `（失敗: ${bad.map(([p]) => p).join('、')}）` : '') : '—'],
     ['最後の知らせ', m.message || '—'],
+    ['サーバーの見張り', !KL.watch ? '—' : !KL.watch.enabled ? '止めている（.env の KANLOG_WATCHDOG=0）'
+      : (KL.watch.message || '待機中（奇数時の 20〜50 分に、その時間の取得が動いたかを確かめます）') + (KL.watch.last_dispatch ? `／最後にサーバーから起動: ${t(KL.watch.last_dispatch)}` : '')],
     ['集計に使った分', k ? `${k.maps} 海域・艦 ${Number(k.pairs).toLocaleString()} 組（うち期間限定 ${k.limited_pairs} 組）・サイトの更新 ${k.site_updated}` : 'まだ使っていません（次の集計から使います）'],
   ];
   $('klStatus').replaceChildren(...rows.flatMap(([a, b]) => [el('dt', {}, a), el('dd', { class: a === '最後の知らせ' && m.ok === false ? 'warn' : '' }, String(b))]));

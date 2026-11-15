@@ -8,10 +8,12 @@
 だけで、集計はすべて GitHub Actions 側で行われる。
 """
 import base64
+import calendar
 import hmac
 import json
 import os
 import secrets
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -353,7 +355,7 @@ def kanlog_status():
                   "created_at": r["created_at"], "url": r["html_url"]} for r in res.get("workflow_runs", [])]
     except GitHubError:
         runs_ = []
-    return jsonify(meta=meta, runs=runs_)
+    return jsonify(meta=meta, runs=runs_, watch=WATCH)
 
 
 @app.route("/api/kanlog/run", methods=["POST"])
@@ -373,6 +375,60 @@ def runs():
         "created_at": r["created_at"], "updated_at": r["updated_at"], "url": r["html_url"],
     } for r in res.get("workflow_runs", [])]
     return jsonify(runs=out)
+
+
+# ---------------------------------------------------------------- 艦ろぐの取得の見張り
+# GitHub Actions の時刻指定 (schedule) は、混んでいると遅れたり飛ばされたりする。
+# そこでこのサーバーが、奇数時 (日本時間) の 20〜50 分の間に「その時間の取得がまだ動いていない」ことを
+# 確かめ、動いていなければ kanlog.yml を起動する (取得そのものは GitHub 側で行う。このサーバーでは何も取らない)。
+# 止めるには .env に KANLOG_WATCHDOG=0 と書く。
+WATCH = {"enabled": os.environ.get("KANLOG_WATCHDOG", "1") != "0", "last_check": 0, "last_dispatch": 0, "message": ""}
+
+
+def _kanlog_watch_once(now):
+    jst = time.gmtime(now + 9 * 3600)
+    if jst.tm_hour % 2 == 0 or not (20 <= jst.tm_min < 50):
+        return None
+    slot_start = now - jst.tm_min * 60 - jst.tm_sec          # この奇数時の 00 分
+    if WATCH["last_check"] >= slot_start:
+        return None                                            # この時間はもう確かめた
+    WATCH["last_check"] = now
+    cfg = json.loads(gh("GET", f"/contents/admin_config.json?ref={BRANCH}", raw=True))
+    if cfg.get("kanlog_rates") is False and cfg.get("kanlog_limited") is False:
+        WATCH["message"] = "艦ろぐを使わない設定なので起動しませんでした"
+        return False
+    try:
+        meta = json.loads(gh("GET", "/contents/meta.json?ref=kanlog", raw=True))
+    except GitHubError as e:
+        if e.status != 404:
+            raise
+        meta = {}
+    if (meta.get("checked_at") or 0) >= slot_start:
+        WATCH["message"] = "GitHub の時刻指定で取得済み"
+        return False
+    res = gh("GET", f"/actions/workflows/{KANLOG_WORKFLOW}/runs?per_page=5")
+    for r in res.get("workflow_runs", []):
+        t = calendar.timegm(time.strptime(r["created_at"], "%Y-%m-%dT%H:%M:%SZ"))
+        if t >= slot_start and r["status"] != "completed":
+            WATCH["message"] = "取得の実行中"
+            return False
+    gh("POST", f"/actions/workflows/{KANLOG_WORKFLOW}/dispatches", {"ref": BRANCH})
+    WATCH["last_dispatch"] = now
+    WATCH["message"] = "GitHub の時刻指定が動いていなかったので、サーバーから起動しました"
+    return True
+
+
+def _kanlog_watch_loop():
+    while True:
+        time.sleep(60)
+        try:
+            _kanlog_watch_once(time.time())
+        except Exception as e:  # noqa: BLE001  見張りが止まらないように、何があっても続ける
+            WATCH["message"] = f"見張りでエラー: {e}"
+
+
+if WATCH["enabled"] and TOKEN:
+    threading.Thread(target=_kanlog_watch_loop, name="kanlog-watch", daemon=True).start()
 
 
 if __name__ == "__main__":
