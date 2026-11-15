@@ -41,6 +41,7 @@ load_env(os.path.join(HERE, ".env"))
 REPO = os.environ.get("GITHUB_REPO", "yss19411208/Kancolle_finder")
 BRANCH = os.environ.get("GITHUB_BRANCH", "main")
 WORKFLOW = os.environ.get("GITHUB_WORKFLOW", "update.yml")
+KANLOG_WORKFLOW = "kanlog.yml"     # 艦ろぐの取得 (2 時間ごと)
 TOKEN = os.environ.get("GITHUB_TOKEN", "")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_HASH = os.environ.get("ADMIN_PASSWORD_HASH", "")
@@ -223,6 +224,16 @@ def validate(key, c):
         for k in ("auto_resident_exclude", "resident_force"):
             if not isinstance(c.get(k, []), list):
                 return f"{k} が不正です"
+        for k in ("kanlog_rates", "kanlog_limited", "kanlog_auto_update"):
+            if not isinstance(c.get(k, True), bool):
+                return f"{k} が不正です"
+        if c.get("rate_period", "table") not in ("table", "all"):
+            return "常設の率を出す期間が不正です"
+        kx = c.get("kanlog_exclude", [])
+        if not isinstance(kx, list) or not all(
+                isinstance(e, dict) and is_str(e.get("map"), 8) and e["map"]
+                and all(is_str(e.get(k, "")) for k in ("node", "ship")) for e in kx):
+            return "艦ろぐを使わないものの指定が不正です（海域は必須）"
         hm = c.get("history_months", 12)
         if not (isinstance(hm, int) and 3 <= hm <= 48):
             return "集計する期間は 3〜48 か月で指定してください"
@@ -323,6 +334,33 @@ def put_limsrc(which):
 @login_required
 def rerun():
     gh("POST", f"/actions/workflows/{WORKFLOW}/dispatches", {"ref": BRANCH})
+    return jsonify(ok=True)
+
+
+@app.route("/api/kanlog")
+@login_required
+def kanlog_status():
+    """艦ろぐの取得状況 (kanlog ブランチの meta.json) と、取得の実行履歴。"""
+    try:
+        meta = json.loads(gh("GET", "/contents/meta.json?ref=kanlog", raw=True))
+    except GitHubError as e:
+        if e.status != 404:
+            raise
+        meta = None
+    try:
+        res = gh("GET", f"/actions/workflows/{KANLOG_WORKFLOW}/runs?per_page=6")
+        runs_ = [{"id": r["id"], "status": r["status"], "conclusion": r["conclusion"], "event": r["event"],
+                  "created_at": r["created_at"], "url": r["html_url"]} for r in res.get("workflow_runs", [])]
+    except GitHubError:
+        runs_ = []
+    return jsonify(meta=meta, runs=runs_)
+
+
+@app.route("/api/kanlog/run", methods=["POST"])
+@login_required
+def kanlog_run():
+    """艦ろぐを今すぐ取りに行く (サイトが更新されていなくても取る)。取れたら再集計も自動で始まる。"""
+    gh("POST", f"/actions/workflows/{KANLOG_WORKFLOW}/dispatches", {"ref": BRANCH, "inputs": {"force": "true"}})
     return jsonify(ok=True)
 
 

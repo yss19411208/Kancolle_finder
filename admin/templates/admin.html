@@ -39,7 +39,7 @@
       </div>
       <div class="col">
         <h3>再集計</h3>
-        <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 05:07〜09:07 に毎時 1 回と、設定の保存時にも自動で実行されます。過去月の取り込みが残っているときは、終わるまで自動で続けて実行されます。</p>
+        <p class="note">GitHub Actions で poi のダンプを取得し直して集計します（数分かかります）。毎日 05:07〜09:07 に毎時 1 回と、設定の保存時にも自動で実行されます。過去月の取り込みが残っているときは、終わるまで自動で続けて実行されます。艦ろぐを取ったあと（2 時間ごと）にも、ダンプは取り直さずに再集計されます。</p>
         <div class="row"><button class="btn primary" id="rerunBtn">今すぐ再集計する</button><button class="btn" id="runsReload">状況を更新</button></div>
         <div class="fill"><table class="list" id="runsTable"><thead><tr><th class="k">開始</th><th>きっかけ</th><th class="k">状態</th><th class="k" style="width:4em"></th></tr></thead><tbody></tbody></table></div>
       </div>
@@ -69,6 +69,41 @@
         <option value="24">24 か月</option><option value="36">36 か月</option><option value="48">48 か月</option>
       </select>
       <span id="histMonthsNow" class="sub-note"></span>
+    </div>
+    <h3>常設の率を出す期間</h3>
+    <div class="row">
+      <select id="ratePeriod">
+        <option value="table">今のドロップ表になってから（艦ろぐの「集計開始」の日から）</option>
+        <option value="all">判定期間すべて</option>
+      </select>
+    </div>
+  </div>
+  <div class="card" data-title="艦ろぐ">
+    <h2>艦ろぐ</h2>
+    <p class="note"><a href="https://kanlog.info/" target="_blank" rel="noopener">艦ろぐ</a>のページを、運営者の方の許可の範囲（2 時間に 1 回、更新の終わった奇数時の 10 分過ぎ）で GitHub Actions が取得し、取れたら再集計します。公開ページの出典には「艦ろぐ」へのリンクだけを載せます。</p>
+    <p class="note">使い方: ① ドロップ率に艦ろぐの件数を足す（poi と艦ろぐの合計で率を出す）。② 艦ろぐで「期間限定」の印が付いている艦も限定にする（最新のアップデート以降に出ているものだけ）。③ poi にまだ記録が無く艦ろぐだけで出ている艦は、限定の印があれば限定として載せ、無ければ載せない（「常設の判定」タブの「艦ろぐだけで出ている」で確認できます）。常設かどうかの判定は、これまでどおり poi の 36 か月分の記録で行います。</p>
+    <p class="note">艦ろぐの数がおかしい海域・マス・艦があれば、下の「使わないもの」に入れるか、「常設の判定」タブの各行の「艦ろぐを使わない」を押してください。海域だけを入れると、その海域の艦ろぐの数と印をすべて使いません。</p>
+    <div class="split">
+      <div class="col">
+        <h3>使い方の設定（その場で保存）</h3>
+        <label class="check"><input type="checkbox" id="klRates"> ドロップ率に艦ろぐの件数を足す</label>
+        <label class="check"><input type="checkbox" id="klLimited"> 艦ろぐの「期間限定」の印を限定の判定に使う</label>
+        <label class="check"><input type="checkbox" id="klAuto"> 艦ろぐを取ったら自動で再集計する</label>
+        <h3>今の状態</h3>
+        <dl id="klStatus" class="kv">読み込み中...</dl>
+        <div class="row"><button class="btn primary" id="klRun">今すぐ艦ろぐを取得する</button><button class="btn" id="klReload">状況を更新</button></div>
+        <div class="fill"><table class="list" id="klRuns"><thead><tr><th class="k">開始</th><th>きっかけ</th><th class="k">状態</th><th class="k" style="width:4em"></th></tr></thead><tbody></tbody></table></div>
+      </div>
+      <div class="col">
+        <h3>艦ろぐの数・印を使わないもの</h3>
+        <div class="row">
+          <select id="klxMap"></select>
+          <input type="text" id="klxNode" placeholder="マス（空なら海域全体）" style="width:9em">
+          <input type="text" id="klxShip" list="shipNames" placeholder="艦名（空ならマス全体）" class="grow">
+          <button class="btn" id="klxAdd">追加</button>
+        </div>
+        <div class="fill"><table class="list" id="klxTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:5em">マス</th><th class="k">艦名</th><th class="k" style="width:5em"></th></tr></thead><tbody></tbody></table></div>
+      </div>
     </div>
   </div>
 </section>
@@ -140,6 +175,12 @@
         <option value="change">出始め・出なくなったもの（変更の検知）</option>
         <option value="suspect">報告が偏っている（誤報告・いたずらの疑い）</option>
         <option value="hold">その海域で初めて出た艦（承認待ち）</option>
+        <option value="klall">艦ろぐの数を並べて見る（すべて）</option>
+        <option value="kllim">艦ろぐで「期間限定」</option>
+        <option value="klonly">艦ろぐだけで出ている（poi に記録なし）</option>
+        <option value="klnolim">限定ページでは限定・艦ろぐでは印なし</option>
+        <option value="kldiff">poi と艦ろぐで率が 2 倍以上違う</option>
+        <option value="kloff">艦ろぐを使わない設定にしたもの</option>
         <option value="pub常設">公開: 常設</option>
         <option value="pub限定">公開: 限定</option>
         <option value="pub1隻報告">公開: 1隻報告（非掲載）</option>
@@ -154,7 +195,7 @@
       </select>
     </div>
     <div id="jgCount" class="note"></div>
-    <div class="fill"><table class="list" id="jgTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k" style="width:8.5em">艦名</th><th class="k" style="width:10em">データの判定</th><th style="width:15em">公開・理由</th><th class="m1 num" style="width:9.5em">ドロップ / 戦闘</th><th class="m1" style="width:6.5em">初ドロップ</th><th class="m2" style="width:11.5em">最終ドロップ</th><th>変化・目印</th><th class="m1" style="width:3.5em">Wiki</th><th class="m2">限定ページ</th><th style="width:12.5em"></th></tr></thead><tbody></tbody></table></div>
+    <div class="fill"><table class="list" id="jgTable"><thead><tr><th class="k" style="width:4.5em">海域</th><th class="k" style="width:3.5em">マス</th><th class="k" style="width:8.5em">艦名</th><th class="k" style="width:10em">データの判定</th><th style="width:15em">公開・理由</th><th class="m1 num" style="width:9.5em">ドロップ / 戦闘</th><th class="m1" style="width:6.5em" data-only="nokl">初ドロップ</th><th class="m2" style="width:11.5em" data-only="nokl">最終ドロップ</th><th data-only="nokl">変化・目印</th><th class="m1" style="width:3.5em">Wiki</th><th class="m2" data-only="nokl">限定ページ</th><th data-only="kl">艦ろぐ（ドロップ / 戦闘・率 poi / 艦ろぐ）</th><th style="width:13.5em"></th></tr></thead><tbody></tbody></table></div>
   </div>
   <div class="card">
     <h2>手動で変えたもの</h2>

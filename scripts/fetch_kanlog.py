@@ -39,7 +39,7 @@ def get(url):
 
 def site_updated(html):
     """ページに書かれている「更新日時：11/15 13:00」を取り出す。"""
-    m = re.search(r"更新日時[：:]\s*([0-9]{1,2}/[0-9]{1,2}\s+[0-9]{1,2}:[0-9]{2})", html)
+    m = re.search(r"更新日時[：:]\s*(?:<time[^>]*>)?\s*([0-9]{1,2}/[0-9]{1,2}\s+[0-9]{1,2}:[0-9]{2})", html)
     return m.group(1) if m else ""
 
 
@@ -98,6 +98,9 @@ def main():
     os.makedirs(args.out, exist_ok=True)
     json.dump(meta, open(meta_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     log(f"艦ろぐ: {ok}/{len(pages)} ページを取得しました")
+    if ok and os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as f:
+            f.write("fetched=1\n")       # 新しいページを取ったので、データ更新を起動する
 
 
 if __name__ == "__main__":

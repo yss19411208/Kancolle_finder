@@ -8,7 +8,12 @@ on:
     - cron: "37 16,17 * * *"
     - cron: "7 20-23 * * *"
     - cron: "7 0 * * *"
-  workflow_dispatch:         # 手動実行 / 管理画面の「再集計」ボタン
+  workflow_dispatch:         # 手動実行 / 管理画面の「再集計」ボタン / 艦ろぐの取得後
+    inputs:
+      source:
+        description: "起動元 (manual / kanlog / chain)"
+        type: string
+        default: manual
   push:                      # 管理画面で設定を保存したら自動で再集計
     branches: [main]
     paths:
@@ -16,6 +21,7 @@ on:
       - Normal_Drop_Ship.json
       - scripts/update.py          # 集計のプログラムを直したときも、すぐ作り直す
       - scripts/parse_limited_page.py
+      - scripts/parse_kanlog.py
       - data/limited_extra.json
       - data/limited_src/current.html   # 管理画面から限定ページの HTML を送ったとき
       - data/limited_src/archive.html
@@ -59,11 +65,26 @@ jobs:
       # 定時実行では 1 日 1 回だけ取りに行く。取れなくても保存済みのページで続ける
       - name: 限定ページ (Wiki) を取得
         continue-on-error: true
-        run: python scripts/fetch_limited_page.py ${{ github.event_name == 'workflow_dispatch' && '--force' || (github.event_name == 'push' && '--no-fetch' || '') }}
+        run: python scripts/fetch_limited_page.py ${{ (github.event_name == 'workflow_dispatch' && inputs.source == 'manual') && '--force' || ((github.event_name == 'push' || inputs.source == 'kanlog') && '--no-fetch' || '') }}
+
+      # 艦ろぐ (kanlog.yml が 2 時間ごとに取得して kanlog ブランチに置いたページ) を読み取る。
+      # 無ければ艦ろぐなしで集計する
+      - name: 艦ろぐのページを読み取る
+        continue-on-error: true
+        run: |
+          if git ls-remote --exit-code --heads origin kanlog >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch kanlog \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" /tmp/kanlog_raw
+            python scripts/parse_kanlog.py --raw /tmp/kanlog_raw --out /tmp/kanlog.json
+          else
+            echo "kanlog ブランチがまだありません (艦ろぐの取得が一度も動いていない)"
+          fi
 
       - name: ダンプを取得して集計
         id: agg
-        run: python scripts/update.py --state-dir state ${{ github.event_name == 'push' && '--smart' || '' }}
+        run: |
+          KL=""; [ -f /tmp/kanlog.json ] && KL="--kanlog /tmp/kanlog.json"
+          python scripts/update.py --state-dir state $KL ${{ (github.event_name == 'push' || inputs.source == 'kanlog') && '--smart' || '' }}
 
       - name: 結果を main にコミット
         run: |
@@ -87,7 +108,8 @@ jobs:
             git reset --quiet --hard origin/main
             cp /tmp/limsrc/* data/limited_src/ 2>/dev/null || true   # この実行で Wiki から取ったページは残す
             python scripts/fetch_limited_page.py --no-fetch || true
-            python scripts/update.py --state-dir state --no-download
+            KL=""; [ -f /tmp/kanlog.json ] && KL="--kanlog /tmp/kanlog.json"
+            python scripts/update.py --state-dir state --no-download $KL
             sleep $((i * 3))
           done
           echo "::error::main へのコミットに失敗しました"
@@ -109,4 +131,4 @@ jobs:
         if: steps.agg.outputs.pending == '1'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run update.yml --repo "${{ github.repository }}" --ref main
+        run: gh workflow run update.yml --repo "${{ github.repository }}" --ref main -f source=chain

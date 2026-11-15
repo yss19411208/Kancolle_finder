@@ -45,6 +45,10 @@ WEEK = 7 * DAY
 GAP_EXPECT = 8            # その期間に「8 回以上は出るはず」なのに 0 回なら、本当に出ていないとみなす (偶然 0 回の確率は約 0.03%)
 NEW_DAYS = 60             # 出始めてからこの日数より短いものは「最近出始めた」(限定の可能性) とする
 RATE_MODES = ("node_s", "node_all", "map_all")
+# 艦ろぐ: 運営者の方のご希望で、出典は「艦ろぐ」へのリンクのみ (データの提供元の名前は書かない)
+KL_SETTLED_DAYS = 120   # poi でこの日数より前から出続けている艦は、艦ろぐの「期間限定」の印があっても常設のまま
+KANLOG_SOURCE = {"name": "艦ろぐ", "url": "https://kanlog.info/", "use": "ドロップ率・期間限定の確認"}
+
 SOURCES = [
     {"name": "poi-db ドロップ記録・建造記録 (poi-server)", "url": "https://github.com/poooi/poi-server/wiki",
      "use": "ドロップ率・常設/限定の判定・建造レシピ"},
@@ -594,6 +598,13 @@ def load_config():
     cfg.setdefault("limited_keep", [])     # 1 件報告でも掲載する (管理画面の「復元」)
     cfg.setdefault("auto_resident_exclude", [])   # データで常設と判定されても、常設から外す
     cfg.setdefault("resident_force", [])          # データの判定に関係なく、常設にする
+    cfg.setdefault("kanlog_rates", True)          # ドロップ率に艦ろぐの件数を足す
+    cfg.setdefault("kanlog_limited", True)        # 艦ろぐの「期間限定」の印を、限定の判定に使う
+    cfg.setdefault("kanlog_exclude", [])          # 艦ろぐの数・印を使わないもの (海域・マス・艦)
+    cfg.setdefault("kanlog_auto_update", True)    # 艦ろぐを取ったら再集計する (kanlog.yml が見る)
+    # 常設の率を出す期間: table = 今のドロップ表になってから (艦ろぐの「集計開始」の日から) / all = 判定期間すべて
+    if cfg.get("rate_period") not in ("table", "all"):
+        cfg["rate_period"] = "table"
     try:
         cfg["history_months"] = max(3, min(48, int(cfg.get("history_months") or HISTORY_MONTHS)))
     except (TypeError, ValueError):
@@ -823,7 +834,7 @@ def rarity_of_names(ships, maps):
     return {n: by_name[n] for n in sorted(names) if by_name.get(n)}
 
 
-def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, node_battles):
+def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, node_battles, kl_lab=""):
     """公開ページでの扱いの理由を、管理画面に出す文章にする (公開していないものは必ず理由を書く)。"""
     C, N = j.get("C", 0), j.get("N", 0)
     cut = fmt_dt(cutoff)[:16] if cutoff is not None else "なし"
@@ -839,6 +850,8 @@ def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, n
             "was_limited": "限定ページでは終了済みだが、その後も出続けている",
         }.get(why, "今も出ている")
     if pub == "限定":
+        if why == "kanlog":
+            return f"艦ろぐで「期間限定 {kl_lab}」になっている。最新のアップデート（{cut}）以降に {since_drops} 件出ている"
         if why == "manual_lim":
             return f"手動で「限定にする」にしている。最新のアップデート（{cut}）以降に {since_drops} 件"
         return f"限定ページで継続中。最新のアップデート（{cut}）以降に {since_drops} 件出ている"
@@ -850,6 +863,10 @@ def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, n
     # ---- 公開していないもの
     if why == "page":
         return f"限定ページで継続中だが、最新のアップデート（{cut}）以降は 1 回も出ていない"
+    if why == "kanlog":
+        return f"艦ろぐで「期間限定 {kl_lab}」になっているが、最新のアップデート（{cut}）以降は 1 回も出ていない"
+    if why == "kanlog_only":
+        return "艦ろぐでだけ出ていて、poi にはまだ記録が無い（誤報告と見分けられないため、poi で確かめるまで載せない）"
     if why == "manual_off":
         return "手動で「常設から外す」にしている"
     few = (f"このマスの戦闘が判定期間に {node_battles:,} 回しかない（{MIN_NODE_BATTLES} 回未満）。"
@@ -935,7 +952,11 @@ def change_notes(judged, cfg, now, on_node, on_map):
     return res
 
 
-def build_drop_data(states, cfg, ships, now, wiki=None):
+def jst_date(ts):
+    return time.strftime("%Y-%m-%d", time.gmtime(ts + 9 * 3600))
+
+
+def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
     """公開ページ用の Drop_Data.json と、管理画面用の判定一覧 (data/judge.json) を作る。
 
     限定 = 期間限定ドロップのページで継続中になっている艦 (アップデート日時以降に出ているもの)。
@@ -943,6 +964,11 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
            率は、今の出方が始まってから (途切れた期間の後) の分で出す。
     載せない = 出なくなった艦 (常設から外れた・限定が終わった)、誤報告の疑い。
     データだけで常設を限定にすることはしない。
+
+    kanlog (艦ろぐ、scripts/parse_kanlog.py の出力) があれば:
+      - 艦ろぐで「期間限定」の印が付いている艦も限定にする (設定 kanlog_limited)
+      - 艦ろぐのドロップ数・戦闘数を poi の数に足して率を出す (設定 kanlog_rates)
+      - poi にまだ記録が無く艦ろぐだけで出ている艦は、限定の印があれば限定として載せ、無ければ載せない
     """
     name_of = {int(k): v["name"] for k, v in ships.items()}
     ti_of = {int(k): v["ti"] for k, v in ships.items()}
@@ -990,6 +1016,67 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
     hist_from = month_start(hist[0]) - 9 * 3600 if hist else now
     notes = change_notes(judged, cfg, now, on_node, on_map)
     single = []
+
+    # ---- 艦ろぐ
+    KL = (kanlog or {}).get("maps", {})
+    kl_rates = bool(KL) and cfg.get("kanlog_rates", True)
+    kl_limited = bool(KL) and cfg.get("kanlog_limited", True)
+    kl_ex = {norm3(e) for e in cfg.get("kanlog_exclude", [])}
+    kl_ex_maps = {e.get("map") for e in cfg.get("kanlog_exclude", []) if e.get("map") and not e.get("node")}
+
+    def kl_node(m, node):
+        if m in kl_ex_maps:
+            return None
+        return (KL.get(m) or {}).get("nodes", {}).get(node)
+
+    def kl_counts(m, node, sid, after=None, strict=False):
+        """艦ろぐの (S, A/B, S戦闘, A/B戦闘)。after (時刻) があれば、その日以降 (strict なら翌日以降) の分だけ。"""
+        nd = kl_node(m, node)
+        if not nd:
+            return 0, 0, 0, 0
+        sid = str(sid)
+        if after is None:
+            c = nd["ships"].get(sid, [0, 0])
+            return c[0], c[1], nd["tot"][0], nd["tot"][1]
+        d0 = jst_date(after)
+        st = KL[m].get("start") or ""
+        if st and (st > d0 if strict else st >= d0):
+            c = nd["ships"].get(sid, [0, 0])           # 艦ろぐの集計がその日より後から始まっている: 全部
+            return c[0], c[1], nd["tot"][0], nd["tot"][1]
+        dates = KL[m].get("dates") or []
+        ok = {str(i) for i, d in enumerate(dates) if (d > d0 if strict else d >= d0)}
+        a = b = x = y = 0
+        for di, v in nd["days"]["ships"].get(sid, {}).items():
+            if di in ok:
+                a += v[0]
+                b += v[1]
+        for di, v in nd["days"]["tot"].items():
+            if di in ok:
+                x += v[0]
+                y += v[1]
+        return a, b, x, y
+
+    _kl_md = {}
+
+    def kl_start_ts(m):
+        """艦ろぐがその海域を集計し始めた日 (= 今のドロップ表になった日) の 0 時 (日本時間)。"""
+        st = (KL.get(m) or {}).get("start")
+        if not st or m in kl_ex_maps:
+            return None
+        try:
+            return calendar.timegm(time.strptime(st[:10], "%Y-%m-%d")) - 9 * 3600
+        except ValueError:
+            return None
+
+    def kl_map_den(m, after=None, strict=False):
+        key = (m, after, strict)
+        if key not in _kl_md:
+            t = 0
+            for node in (KL.get(m) or {}).get("nodes", {}):
+                _, _, x, y = kl_counts(m, node, 0, after, strict)
+                t += x + y
+            _kl_md[key] = t
+        return _kl_md[key]
 
     def rate(ds, do, ns, no, m=None, mden=None):
         """率 [%], ドロップ数, 分母, 基準。
@@ -1077,6 +1164,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
 
     maps, judge_rows = {}, []
     places = set(tot) | {(e["map"], e["node"]) for e in cfg["limited_manual"] if e.get("map") and e.get("node")}
+    if kl_rates or kl_limited:
+        places |= {(m, node) for m, v in KL.items() for node in v.get("nodes", {}) if m not in kl_ex_maps}
     for m, node in sorted(places, key=lambda p: (map_key(p[0]), p[1])):
         if node.startswith("#"):
             continue
@@ -1086,6 +1175,10 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         rows, seen = [], set()
         sids = {sid for (mm, nd, sid) in judged if mm == m and nd == node}
         sids |= {sid for (mm, nd, sid) in since_sid if mm == m and nd == node}
+        kln = kl_node(m, node) if (kl_rates or kl_limited) else None
+        kln_raw = (KL.get(m) or {}).get("nodes", {}).get(node)      # 表示用 (使わない設定でも数は見せる)
+        if kln:
+            sids |= {int(x) for x in kln["ships"]}
         for e in cfg["resident_force"]:
             if e.get("map") == m and e.get("node") == node and id_by_norm.get(norm_name(e.get("ship", ""))):
                 sids.add(id_by_norm[norm_name(e["ship"])])
@@ -1099,11 +1192,21 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
                 cls = "fewnode"     # 戦闘の無いマス (資源マスなど) に紛れ込んだ記録。率も意味をなさない
             page = ("ongoing" if (k3 in on_node or (m, nn) in on_map)
                     else "ended" if (k3 in ended or (m, None, nn) in ended) else "")
+            # 艦ろぐ: この艦の数と「期間限定」の印
+            use_kl = bool(kln) and k3 not in kl_ex
+            kl_lab = (kln["lim"].get(str(sid), "") if kln else "")
+            # 艦ろぐは、昔の限定で入ってそのまま常設になった艦 (2019 年の秋刀魚祭りの朝霜など) にも
+            # 「期間限定」の印を付けている。poi で 120 日以上前から出続けている艦は、印があっても常設のままにする
+            kl_settled = bool(j) and cls in ("continuous", "added", "intermittent") and j["first"] < now - KL_SETTLED_DAYS * DAY
+            kl_lim_use = kl_lab if (use_kl and not kl_settled) else ""
+            klS, klO, klnS, klnO = kl_counts(m, node, sid) if use_kl else (0, 0, 0, 0)
             # 公開ページでの扱い
             if k3 in res_force:
                 pub, why = "常設", "manual"
             elif page == "ongoing":
                 pub, why = "限定", "page"
+            elif kl_limited and kl_lim_use:
+                pub, why = "限定", "kanlog"
             elif k3 in manual_lim:
                 pub, why = "限定", "manual_lim"
             elif cls == "fewnode":
@@ -1112,9 +1215,17 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
                 pub, why = "", "manual_off"
             elif cls in ("continuous", "added", "new", "intermittent"):
                 pub, why = "常設", ("was_limited" if page == "ended" else cls)
+            elif not j and use_kl and klS + klO:
+                pub, why = "", "kanlog_only"    # poi にまだ記録が無く、艦ろぐだけで出ている
             else:
                 pub, why = "", cls          # stopped / misreport / 記録なし: 載せない
             ds, do = since_sid.get((m, node, sid), (0, 0))
+            ns_poi, no_poi = since_den.get((m, node), (0, 0))
+            # アップデート日時以降の数に、艦ろぐの分 (アップデートの翌日以降) を足す
+            kls = kl_counts(m, node, sid, start, strict=True) if (use_kl and cutoff is not None) else \
+                ((klS, klO, klnS, klnO) if use_kl else (0, 0, 0, 0))
+            if use_kl and (kl_rates or kl_limited):
+                ds, do = ds + kls[0], do + kls[1]
             # 出始めて (再開して) 60 日未満の艦は、最新のアップデート後にも出ていることを確かめてから常設にする。
             # 限定がメンテナンスで終わった直後は「出なくなった」と言えるだけの戦闘数がまだ無いため
             if pub == "常設" and why != "manual" and cutoff is not None and not (ds + do):
@@ -1132,36 +1243,65 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             if (pub == "常設" and why not in ("manual",) and cls == "new"
                     and map_first.get((m, sid)) == j.get("first") and j["first"] - hist_from >= NEW_DAYS * DAY):
                 pub, why = "", "hold"
+            add_kl = kl_rates and use_kl
+            # 常設の率を出す期間: 今の出方が始まってから (seg)、または今のドロップ表になってから (艦ろぐの集計開始) の新しい方
+            tbl = kl_start_ts(m) if cfg.get("rate_period") == "table" else None
+            wstart = max(j.get("seg") or 0, tbl or 0) or None
             if pub == "常設":
-                seg = j.get("seg")
+                seg = wstart
                 if seg:
                     a, b, c1, c2 = seg_sum(m, node, sid, seg)
-                    r, d, n, basis = rate(c1, c2, a, b, m, seg_map(m, seg))
+                    ka = kl_counts(m, node, sid, seg) if add_kl else (0, 0, 0, 0)
+                    r, d, n, basis = rate(c1 + ka[0], c2 + ka[1], a + ka[2], b + ka[3], m,
+                                          seg_map(m, seg) + (kl_map_den(m, seg) if add_kl else 0))
                 else:
-                    r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m, map_den_all[m])
+                    r, d, n, basis = rate(dS.get(sid, 0) + (klS if add_kl else 0), dO.get(sid, 0) + (klO if add_kl else 0),
+                                          nS + (klnS if add_kl else 0), nO + (klnO if add_kl else 0), m,
+                                          map_den_all[m] + (kl_map_den(m) if add_kl else 0))
                 rows.append([nm, ti_of.get(sid, 7), 0, r, d, n, basis, why])
                 seen.add(nn)
             elif pub == "":
                 pass
             elif ds + do and k3 not in exclude:
-                ns, no = since_den.get((m, node), (0, 0))
+                ns, no = ns_poi + (kls[2] if add_kl else 0), no_poi + (kls[3] if add_kl else 0)
+                if not add_kl:      # 率には足さないが、限定の判定には艦ろぐの数を使った
+                    ds, do = since_sid.get((m, node, sid), (0, 0))
+                    if not ds + do:
+                        ds, do = kls[0], kls[1]
+                        ns, no = kls[2], kls[3]
                 if ds + do == 1 and ns + no >= SINGLE_MIN_BATTLES and k3 not in keep:
                     single.append([m, node, nm, ns + no])
                     pub = "1隻報告"
                 else:
-                    r, d, n, basis = rate(ds, do, ns, no, m, map_den_since[m])
+                    r, d, n, basis = rate(ds, do, ns, no, m, map_den_since[m] + (
+                        kl_map_den(m, start, strict=True) if add_kl and cutoff is not None else 0))
                     rows.append([nm, ti_of.get(sid, 7), 1, r, d, n, basis, why])
                     seen.add(nn)
             else:
                 pub = "除外" if k3 in exclude else ""
-            if j or pub:
-                nt = notes.get((m, node, sid), {})
-                ns, no = since_den.get((m, node), (0, 0))
-                reason = reason_text(pub, why, cls, j, nt, sus, ds + do, ns + no, cutoff, nS + nO)
+            if j or pub or (kln_raw and kln_raw["ships"].get(str(sid))):
+                nt = dict(notes.get((m, node, sid), {}))
+                if kl_lab and kl_settled and use_kl and pub == "常設":
+                    nt["lim"] = (nt.get("lim", "") + " / " if nt.get("lim") else "") + \
+                        f"艦ろぐでは「期間限定 {kl_lab}」（poi では {KL_SETTLED_DAYS} 日以上前から出続けているので常設のまま）"
+                reason = reason_text(pub, why, cls, j, nt, sus, ds + do, ns_poi + no_poi + kls[2] + kls[3],
+                                     cutoff, nS + nO, kl_lab)
+                if wstart:
+                    a, b, c1, c2 = seg_sum(m, node, sid, wstart)
+                    poi_r = rate(c1, c2, a, b, m, seg_map(m, wstart))[0] if a + b else None
+                else:
+                    poi_r = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m, map_den_all[m])[0] if (nS + nO) else None
+                raw = kln_raw["ships"].get(str(sid), [0, 0]) if kln_raw else [0, 0]
+                kl_r = (rate(raw[0], raw[1], kln_raw["tot"][0], kln_raw["tot"][1], m, kl_map_den(m) or sum(kln_raw["tot"]))[0]
+                        if (kln_raw and sum(kln_raw["tot"])) else None)
                 judge_rows.append([m, node, nm, cls, j.get("C", 0), j.get("N", 0),
                                    fmt_dt(j["first"])[:10] if j else "", fmt_dt(min(j["last"], now))[:10] if j else "",
                                    int(k3 in wiki_set), page, pub, why,
-                                   j.get("rank", ""), nt.get("change", ""), nt.get("lim", ""), sus, reason])
+                                   j.get("rank", ""), nt.get("change", ""), nt.get("lim", ""), sus, reason,
+                                   (raw[0] + raw[1]) if kln_raw else None, sum(kln_raw["tot"]) if kln_raw else None,
+                                   (kln_raw["lim"].get(str(sid), "") if kln_raw else ""),
+                                   (kln_raw["last"].get(str(sid), "") if kln_raw else ""), poi_r, kl_r,
+                                   int(k3 in kl_ex or m in kl_ex_maps)])
         # 手動で追加した限定 (追加日時が基準日時より前のものは自動的に外れる)
         for e in cfg["limited_manual"]:
             if e.get("map") != m or e.get("node") != node or not e.get("ship"):
@@ -1174,7 +1314,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             seen.add(nn)
         if rows:
             rows.sort(key=lambda r: (r[1], r[2], r[0]))
-            maps.setdefault(m, {})[node] = {"boss": boss, "n": nS, "ships": rows}
+            n_kl = (kln["tot"][0] if kln and kl_rates else 0)
+            maps.setdefault(m, {})[node] = {"boss": boss, "n": nS + n_kl, "ships": rows}
     # Wiki にあるのに、判定期間に 1 回も出ていないもの (管理画面の照合用)
     seen_pairs = {(r[0], r[1], norm_name(r[2])) for r in judge_rows}
     for (m, node, nn) in sorted(wiki_set - seen_pairs):
@@ -1183,7 +1324,7 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
             x = tot[(m, node)]
             judge_rows.append([m, node, nm, "none", 0, x[0] + x[1], "", "", 1, "", "", "none", "", "", "", "",
                                f"Wiki の出撃ドロップには載っているが、判定期間（{hist[0]}〜{hist[-1]}）の"
-                               f"戦闘 {x[0] + x[1]:,} 回で 1 回も出ていない"])
+                               f"戦闘 {x[0] + x[1]:,} 回で 1 回も出ていない", None, None, "", "", None, None, 0])
 
     rejected = sum(v for mo in hist for nodes in states[mo].get("rej", {}).values()
                    for rs in nodes.values() for v in rs.values())
@@ -1199,7 +1340,12 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         "months": hist,
         "limited_months": [mo for mo in months if cutoff is not None and mo >= month_of(cutoff)] or hist,
         "rate_mode": mode,
-        "sources": SOURCES,
+        "sources": SOURCES + ([KANLOG_SOURCE] if KL and (kl_rates or kl_limited) else []),
+        "kanlog": ({"site_updated": kanlog.get("site_updated", ""), "fetched_at": kanlog.get("fetched_at", 0),
+                    "maps": len(KL), "rates": kl_rates, "limited": kl_limited,
+                    "pairs": sum(len(n["ships"]) for v in KL.values() for n in v.get("nodes", {}).values()),
+                    "limited_pairs": sum(len(n["lim"]) for v in KL.values() for n in v.get("nodes", {}).values()),
+                    "starts": {m: v.get("start") for m, v in KL.items()}} if KL else None),
         # レア度 (api_backs): 1 = コモン (1〜3) / 2 = レア (4〜5) / 3 = スーパーレア (6〜8)
         "rarity": rarity_of_names(ships, maps),
         "single_hidden": single,
@@ -1212,7 +1358,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None):
         "months": hist,
         "labels": JUDGE_LABEL,
         "columns": ["map", "node", "ship", "class", "drops", "battles", "first", "last", "wiki", "page", "published", "why",
-                    "rank", "change", "lim", "suspect", "reason"],
+                    "rank", "change", "lim", "suspect", "reason",
+                    "kl", "kl_n", "kl_lim", "kl_last", "poi_rate", "kl_rate", "kl_off"],
         "rows": judge_rows,
     }
     return data, judge
@@ -1423,6 +1570,7 @@ def main():
     ap.add_argument("--smart", action="store_true",
                     help="当日すでにダンプを取得済みで、アップデート日時と常駐リストが同じなら再取得しない")
     ap.add_argument("--now", help="現在時刻を上書き (テスト用, 'YYYY/MM/DD HH:MM:SS' 日本時間)")
+    ap.add_argument("--kanlog", help="艦ろぐの読み取り結果 (scripts/parse_kanlog.py の出力)")
     args = ap.parse_args()
 
     now = parse_dt(args.now) if args.now else int(time.time())
@@ -1606,7 +1754,11 @@ def main():
             os.remove(state_path(args.state_dir, "drop", mo))
         except OSError:
             pass
-    drop, judge = build_drop_data(drop_states, cfg, ships, now, wiki)
+    kanlog = load_json(args.kanlog) if args.kanlog and os.path.exists(args.kanlog) else None
+    if kanlog:
+        log(f"艦ろぐ: {len(kanlog.get('maps', {}))} 海域（サイトの更新 {kanlog.get('site_updated') or '不明'}）"
+            f" / 率に足す: {'はい' if cfg['kanlog_rates'] else 'いいえ'} / 期間限定の印を使う: {'はい' if cfg['kanlog_limited'] else 'いいえ'}")
+    drop, judge = build_drop_data(drop_states, cfg, ships, now, wiki, kanlog)
     # 中身が変わらない日はファイルを書き換えない (作成日時だけの違いで毎回コミットされるのを避ける)
     def same(a, b):
         strip = lambda d: {k: v for k, v in (d or {}).items() if k != "generated"}  # noqa: E731

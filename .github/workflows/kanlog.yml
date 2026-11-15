@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  actions: write             # 新しいページを取ったら、データ更新 (update.yml) を起動する
 
 concurrency:
   group: kanlog
@@ -44,6 +45,7 @@ jobs:
           fi
 
       - name: 艦ろぐのページを取得
+        id: fetch
         run: python scripts/fetch_kanlog.py --out kanlog ${{ inputs.force && '--force' || '' }}
 
       - name: kanlog ブランチに保存 (履歴は残さない)
@@ -56,3 +58,17 @@ jobs:
           git commit --quiet -m "艦ろぐ $(TZ=Asia/Tokyo date '+%Y/%m/%d %H:%M')"
           git push --quiet --force \
             "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" kanlog
+
+      # 新しいページを取ったら、すぐにデータ更新を起動する (ダンプは取り直さず、艦ろぐの数だけ入れ替える)。
+      # 管理画面の設定「艦ろぐを取ったら再集計する」(kanlog_auto_update) を切ると起動しない
+      - name: データ更新を起動
+        if: steps.fetch.outputs.fetched == '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          AUTO=$(python -c "import json;c=json.load(open('admin_config.json',encoding='utf-8'));print('0' if c.get('kanlog_auto_update') is False or (c.get('kanlog_rates') is False and c.get('kanlog_limited') is False) else '1')" 2>/dev/null || echo 1)
+          if [ "$AUTO" = "1" ]; then
+            gh workflow run update.yml --repo "${{ github.repository }}" --ref main -f source=kanlog
+          else
+            echo "管理画面の設定で、艦ろぐの取得後の再集計は切られています"
+          fi

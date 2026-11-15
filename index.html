@@ -1361,8 +1361,9 @@ function renderSources() {
   const lines = [
     d.records ? `ドロップ記録: ${Number(d.records).toLocaleString()} 件（${(d.months || []).join('、')} / ${d.data_from || '?'} ～ ${d.data_to || '?'}）` : '',
     d.cutoff ? `限定ドロップ: ${d.cutoff} 以降の記録（${(d.limited_months || []).join('、')}）` : '限定ドロップ: 集計期間の全記録',
+    d.kanlog ? `艦ろぐ: ${d.kanlog.site_updated || '?'} 更新分（各海域の集計開始日から）` : '',
     b.records ? `建造記録: ${Number(b.records).toLocaleString()} 件（${(b.months || []).join('、')}）` : '',
-    `最終集計: ${d.generated || '不明'}（日本時間、毎日自動更新）`,
+    `最終集計: ${d.generated || '不明'}（日本時間、毎日自動更新・艦ろぐの分は 2 時間ごと）`,
   ].filter(Boolean).map(x => `<li>${x}</li>`).join('');
   $('sources').innerHTML = `<h3>集計に使用したデータ</h3><ul>${li}</ul><h3 style="margin-top:8px">集計範囲</h3><ul>${lines}</ul>`;
 }

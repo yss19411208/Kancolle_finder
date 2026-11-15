@@ -105,8 +105,12 @@ function redrawVisible() { for (const id of Object.keys(PG)) if (PG[id].box.offs
 function applyMinor(table) {
   const w = (table.closest('.fill') || table).clientWidth || window.innerWidth;
   table._hide = [];
+  const mode = table.dataset.mode || '';
   [...table.tHead.rows[0].cells].forEach((th, i) => {
-    const h = w < 640 ? !th.classList.contains('k')       // スマホ: 大事な列 (k) だけ。残りは行を押すと詳細に出る
+    // data-only: 表示中の一覧によって出し分ける列 (艦ろぐの一覧では「艦ろぐ」列を出し、代わりに目印・限定ページを隠す)
+    const only = th.dataset.only;
+    const h = only && (only === 'kl' ? mode !== 'kl' : mode === 'kl') ? true
+      : w < 640 ? !th.classList.contains('k')       // スマホ: 大事な列 (k) だけ。残りは行を押すと詳細に出る
       : (th.classList.contains('m1') && w < 1100) || (th.classList.contains('m2') && w < 760);
     th.classList.toggle('hide', h);
     if (h) table._hide.push(i);
@@ -235,7 +239,8 @@ async function loadAll() {
   const keys = ['config', 'resident', 'history', 'drop', 'master', 'routes', 'log', 'lastdrop', 'limpage', 'judge', 'limstatus'];
   const res = await Promise.all(keys.map(k => api('/api/file/' + k)));
   keys.forEach((k, i) => { S[k] = res[i].content; S.sha[k] = res[i].sha; });
-  S.config = Object.assign({ updates: [], limited_manual: [], limited_exclude: [], limited_keep: [], auto_resident_exclude: [], resident_force: [], history_months: 12 }, S.config || {});
+  S.config = Object.assign({ updates: [], limited_manual: [], limited_exclude: [], limited_keep: [], auto_resident_exclude: [], resident_force: [], history_months: 12,
+    kanlog_rates: true, kanlog_limited: true, kanlog_auto_update: true, kanlog_exclude: [], rate_period: 'table' }, S.config || {});
   delete S.config.end_dates;   // 終了日の機能は廃止
   S.resident = S.resident || {};
   S.history = Array.isArray(S.history) ? S.history : [];
@@ -250,7 +255,7 @@ async function loadAll() {
   renderAll();
 }
 function renderAll() {
-  renderDash(); renderLog(); renderUpdates(); fillMapSelects(); renderResident(); renderJudge(); renderLimited(); renderLimStatus(); renderLastDrop(); renderHistory();
+  renderDash(); renderLog(); renderUpdates(); fillMapSelects(); renderResident(); renderJudge(); renderLimited(); renderLimStatus(); renderLastDrop(); renderHistory(); renderKanlog();
 }
 
 // ---------------------------------------------------------------- 保存
@@ -287,9 +292,11 @@ function renderDash() {
     ['限定ドロップ', `${nLim} 件（うち手動 ${nMan} 件）`],
     ['誤記録として除外', (S.drop && S.drop.rejected != null) ? `${Number(S.drop.rejected).toLocaleString()} 件（判定期間の合計）` : '—'],
     ['海域数', Object.keys(d.maps || {}).length],
+    ['艦ろぐ', d.kanlog ? `${d.kanlog.maps} 海域（サイトの更新 ${d.kanlog.site_updated || '?'}）・率に${d.kanlog.rates ? '足す' : '足さない'}・限定の印を${d.kanlog.limited ? '使う' : '使わない'}` : '使っていない'],
   ];
   $('rateMode').value = S.config.rate_mode || 'node_s';
   $('histMonths').value = String(S.config.history_months || 12);
+  $('ratePeriod').value = S.config.rate_period || 'table';
   const jm = (S.judge || {}).months || [];
   $('histMonthsNow').textContent = jm.length ? `いま判定に使えている月: ${jm[0]} 〜 ${jm[jm.length - 1]}（${jm.length} か月）` : '';
   $('dashInfo').replaceChildren(...rows.flatMap(([k, v]) => [el('dt', {}, k), el('dd', {}, String(v))]));
@@ -447,6 +454,9 @@ function fillMapSelects() {
   $('resMap').replaceChildren(...Object.keys(S.resident).sort(mapCmp).map(m => el('option', { value: m }, m)));
   if (cur && S.resident[cur]) $('resMap').value = cur;
   $('manMap').replaceChildren(...opts());
+  const kc = $('klxMap').value;
+  $('klxMap').replaceChildren(...opts());
+  if (kc) $('klxMap').value = kc;
 }
 function renderResident() {
   const m = $('resMap').value;
@@ -466,6 +476,21 @@ function renderResident() {
 const JG_CLASS = { continuous: 'ok', added: 'ok', new: 'ok', stopped: 'ng', intermittent: 'ok', misreport: 'ng', fewnode: 'ng', none: '' };
 const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み・その後も出ている', manual: '手動で常設', page: '限定ページで継続中', auto: '', manual_off: '手動で外した', unconfirmed: 'アップデート後に未確認・件数不足', fewnode: '', suspect: '報告が偏っている', hold: '承認待ち（初めて出た艦）', manual_lim: '手動で限定', new: '', intermittent: '再開後の率', stopped: '', misreport: '' };
 let jgRows = [];
+const JG_WHY_KL = { kanlog: '艦ろぐで期間限定', kanlog_only: '艦ろぐだけで出ている' };
+Object.assign(JG_WHY, JG_WHY_KL);
+// poi と艦ろぐの率が 2 倍以上違う (どちらも 30 件以上あるもの)
+const klDiff = r => r.poi_rate > 0 && r.kl_rate > 0 && r.kl >= 30 && r.drops >= 30 && Math.max(r.poi_rate, r.kl_rate) / Math.min(r.poi_rate, r.kl_rate) >= 2;
+const pct = x => x == null ? '—' : (x >= 10 ? x.toFixed(1) : x >= 0.1 ? x.toFixed(2) : x.toFixed(3)) + '%';
+function klCell(r) {
+  if (r.kl == null) return el('td', { class: 'sub' }, '艦ろぐに記録なし');
+  const tip = [r.kl_lim ? `艦ろぐ: 期間限定 ${r.kl_lim}` : '', r.kl_last ? `艦ろぐの最終ドロップ: ${r.kl_last}` : '', r.kl_off ? '艦ろぐを使わない設定' : ''].filter(Boolean).join('\n');
+  // 1 行に収める (表は 1 行ずつの高さでページを分けているため)。詳しくは行を押すと開く詳細に出る
+  return el('td', { title: tip },
+    r.kl_lim ? el('span', { class: 'tag wait' }, '期間限定') : null, r.kl_off ? el('span', { class: 'tag' }, '不使用') : null,
+    el('span', { class: 'num' }, ` ${Number(r.kl).toLocaleString()} / ${Number(r.kl_n || 0).toLocaleString()} `),
+    el('span', { class: 'sub' + (klDiff(r) ? ' warn' : '') }, `${pct(r.poi_rate)} / ${pct(r.kl_rate)}`),
+    r.kl_lim ? el('div', { class: 'sub reason' }, `期間限定 ${r.kl_lim}`) : null);
+}
 function renderJudge() {
   const j = S.judge || { columns: [], rows: [], labels: {} };
   const cols = j.columns || [];
@@ -477,6 +502,7 @@ function renderJudge() {
     ['常設として公開', cnt(pub), 'pub常設'], ['限定として公開', cnt(r => r.published === '限定'), 'pub限定'],
     ['限定の可能性', cnt(r => r.lim && pub(r)), 'limcand'], ['報告が偏っている', cnt(r => !!r.suspect), 'suspect'],
     ['承認待ち', cnt(r => r.why === 'hold'), 'hold'], ['出なくなった', cnt(r => r.class === 'stopped'), 'stopped'],
+    ['艦ろぐで限定', cnt(r => !!r.kl_lim), 'kllim'], ['艦ろぐだけ', cnt(r => r.why === 'kanlog_only'), 'klonly'], ['poi と艦ろぐで率が違う', cnt(klDiff), 'kldiff'],
     ['Wiki と食い違う', cnt(r => (r.wiki && !pub(r)) || (!r.wiki && pub(r))), 'check'],
   ];
   $('jgSummary').replaceChildren(...items.map(([k, v, view]) => el('button', { type: 'button', class: 'chip', title: 'この一覧を表示', on: { click: () => { $('jgView').value = view; drawJudge(); } } }, el('b', {}, Number(v).toLocaleString()), el('span', {}, k))));
@@ -491,9 +517,11 @@ function drawJudge() {
     check: r => (r.wiki && !pub(r)) || (!r.wiki && pub(r)) || r.class === 'stopped',
     wikinot: r => r.wiki && !pub(r), notwiki: r => !r.wiki && pub(r), stopped: r => r.class === 'stopped', misreport: r => r.class === 'misreport', unconfirmed: r => r.why === 'unconfirmed',
     limcand: r => r.lim && r.published === '常設', change: r => !!r.change, suspect: r => !!r.suspect, hold: r => r.why === 'hold',
+    klall: r => r.kl != null, kllim: r => !!r.kl_lim, klnolim: r => r.why === 'page' && r.published === '限定' && r.kl != null && !r.kl_lim, klonly: r => r.why === 'kanlog_only', kldiff: klDiff, kloff: r => !!r.kl_off || S.config.kanlog_exclude.some(e => e.map === r.map && (!e.node || (e.node === r.node && (!e.ship || norm(e.ship) === norm(r.ship))))),
     pubnone: r => !r.published, all: () => true,
   }[view] || (r => r.published === view.slice(3));
   const rows = jgRows.filter(r => f(r) && matchQ(r.key, q));
+  $('jgTable').dataset.mode = view.startsWith('kl') ? 'kl' : '';
   const cmp = {
     place: (a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node, b.node) || a.ship.localeCompare(b.ship, 'ja'),
     last: (a, b) => (a.last || '').localeCompare(b.last || '') || mapCmp(a.map, b.map),
@@ -514,6 +542,11 @@ function drawJudge() {
     else if (r.published === '常設') btn = el('div', { class: 'btns' }, el('button', { class: 'btn small', on: { click: () => { off.push(a); markDirty('config', `常設から外す ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設から外す'), r.page !== 'ongoing' ? toLim : null);
     else btn = el('div', { class: 'btns' }, el('button', { class: 'btn small', on: { click: () => { force.push(a); markDirty('config', `常設にする ${r.map}-${r.node} ${r.ship}`); renderJudge(); } } }, '常設にする'), r.published !== '限定' && r.page !== 'ongoing' ? toLim : null);
     const why = JG_WHY[r.why] || '';
+    const klx = S.config.kanlog_exclude, klOne = klx.find(e => e.map === r.map && e.node === r.node && norm(e.ship || '') === norm(r.ship));
+    const klBtn = (r.kl == null || !view.startsWith('kl')) ? null : klOne
+      ? el('button', { class: 'btn small', title: '艦ろぐの数と印をまた使う', on: { click: () => { klx.splice(klx.indexOf(klOne), 1); markDirty('config', `艦ろぐを使う ${r.map}-${r.node} ${r.ship}`); renderJudge(); renderKanlog(); } } }, '艦ろぐ使用')
+      : r.kl_off ? el('span', { class: 'tag', title: '海域・マスごと艦ろぐを使わない設定になっています（「状況・再集計」→「艦ろぐ」）' }, '艦ろぐ不使用')
+      : el('button', { class: 'btn small', title: 'この艦について、艦ろぐの数と「期間限定」の印を使わない', on: { click: () => { klx.push({ map: r.map, node: r.node, ship: r.ship }); markDirty('config', `艦ろぐを使わない ${r.map}-${r.node} ${r.ship}`); renderJudge(); renderKanlog(); } } }, '艦ろぐ除外');
     return el('tr', {},
       el('td', {}, r.map), el('td', {}, r.node), el('td', {}, r.ship),
       el('td', {}, el('span', { class: 'tag ' + (JG_CLASS[r.class] || '') }, labels[r.class] || r.class || '—'), r.rank ? el('div', { class: 'sub' }, r.rank === 'S' ? 'S勝利' : 'A/B勝利') : null),
@@ -525,7 +558,8 @@ function drawJudge() {
       el('td', { class: 'notes' }, r.change ? el('div', {}, r.change) : null, r.lim ? el('div', { class: 'warn' }, '⚑ ' + r.lim) : null, r.suspect ? el('div', { class: 'warn' }, '⚠ ' + r.suspect) : null, !(r.change || r.lim || r.suspect) ? '—' : null),
       el('td', {}, r.wiki ? '常駐' : '—'),
       evCell(limitedEvents(r.map, r.node, r.ship), '記載なし'),
-      el('td', {}, btn));
+      klCell(r),
+      el('td', {}, klBtn ? el('div', { class: 'btns' }, ...(btn.classList.contains('btns') ? [...btn.childNodes] : [btn]), klBtn) : btn));
   }, { key: [q, view, sort].join('|'), empty: '該当なし' });
 }
 function renderOverrides() {
@@ -702,7 +736,7 @@ function renderLimited() {
       el('td', {}, a.map), el('td', {}, a.node), el('td', {}, a.ship),
       el('td', { class: 'num' }, a.rate === null ? '—' : a.rate + '%'),
       el('td', { class: 'num' }, `${a.drops} / ${a.n}`),
-      el('td', {}, a.why === 'page' ? '限定ページで継続中' : judgeLabel(a.map, a.node, a.ship)),
+      el('td', {}, a.why === 'page' ? '限定ページで継続中' : a.why === 'kanlog' ? '艦ろぐで期間限定' : judgeLabel(a.map, a.node, a.ship)),
       lastCell(a.map, a.node, a.ship),
       evCell(limitedEvents(a.map, a.node, a.ship), '限定ページに記載なし'),
       el('td', {}, excluded ? el('span', { class: 'tag' }, '除外予定') : [
@@ -732,6 +766,39 @@ function renderLimited() {
     el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { ex.splice(ex.indexOf(e), 1); markDirty('config', `除外を解除 ${e.map}-${e.node} ${e.ship}`); renderLimited(); } } }, '解除'))));
 }
 // ---------------------------------------------------------------- 限定ページ (Wiki) の取得状況と HTML の送信
+// ---------------------------------------------------------------- 艦ろぐ
+let KL = { meta: null, runs: [] };
+function renderKanlog() {
+  const c = S.config;
+  $('klRates').checked = c.kanlog_rates !== false; $('klLimited').checked = c.kanlog_limited !== false; $('klAuto').checked = c.kanlog_auto_update !== false;
+  const m = KL.meta || {}, k = (S.drop || {}).kanlog;
+  const t = x => x ? fmt(new Date(x * 1000)) : '—';
+  const pages = m.pages || {}, bad = Object.entries(pages).filter(([, v]) => v !== 'ok');
+  const rows = [
+    ['サイトの更新日時', m.site_updated || '—'],
+    ['最後にページを取った日時', t(m.fetched_at)],
+    ['最後に確かめた日時', t(m.checked_at) + (m.ok === false ? '（失敗あり）' : '')],
+    ['取ったページ', Object.keys(pages).length ? `${Object.keys(pages).length - bad.length} / ${Object.keys(pages).length}` + (bad.length ? `（失敗: ${bad.map(([p]) => p).join('、')}）` : '') : '—'],
+    ['最後の知らせ', m.message || '—'],
+    ['集計に使った分', k ? `${k.maps} 海域・艦 ${Number(k.pairs).toLocaleString()} 組（うち期間限定 ${k.limited_pairs} 組）・サイトの更新 ${k.site_updated}` : 'まだ使っていません（次の集計から使います）'],
+  ];
+  $('klStatus').replaceChildren(...rows.flatMap(([a, b]) => [el('dt', {}, a), el('dd', { class: a === '最後の知らせ' && m.ok === false ? 'warn' : '' }, String(b))]));
+  const ev = { schedule: '2 時間ごとの自動実行', workflow_dispatch: '手動' };
+  paged('klRuns', KL.runs, r => {
+    const st = r.status !== 'completed' ? ['実行中', 'wait'] : r.conclusion === 'success' ? ['成功', 'ok'] : [r.conclusion || '失敗', 'ng'];
+    return el('tr', {}, el('td', { class: 'num' }, fmt(new Date(r.created_at))), el('td', {}, ev[r.event] || r.event),
+      el('td', {}, el('span', { class: 'tag ' + st[1] }, st[0])), el('td', {}, el('a', { href: r.url, target: '_blank', rel: 'noopener' }, 'ログ')));
+  }, { empty: 'まだ実行されていません' });
+  const list = c.kanlog_exclude;
+  paged('klxTable', list.slice().sort((a, b) => mapCmp(a.map, b.map) || nodeCmp(a.node || '', b.node || '')), e => el('tr', {},
+    el('td', {}, e.map), el('td', {}, e.node || '（全体）'), el('td', {}, e.ship || '（全体）'),
+    el('td', {}, el('button', { class: 'btn small danger', on: { click: () => { list.splice(list.indexOf(e), 1); markDirty('config', `艦ろぐを使う ${e.map}${e.node ? '-' + e.node : ''} ${e.ship || ''}`); renderKanlog(); renderJudge(); } } }, '取り消し'))),
+    { empty: 'なし（すべて使う）' });
+}
+async function loadKanlog() {
+  try { KL = await api('/api/kanlog'); } catch (e) { toast(e.message, true); }
+  renderKanlog();
+}
 function renderLimStatus() {
   const st = S.limstatus || {}, pg = st.page || (S.limpage ? { events: (S.limpage.events || []).length, entries: (S.limpage.entries || []).length, ongoing: Object.keys(S.limpage.ongoing || {}).length } : null);
   const t = x => x ? fmt(new Date(x * 1000)) : '—';
@@ -836,6 +903,28 @@ $('wikiFile').addEventListener('change', async e => {
 });
 $('limFilter').addEventListener('input', renderLimited);
 ['jgFilter', 'jgView', 'jgSort'].forEach(id => $(id).addEventListener(id === 'jgFilter' ? 'input' : 'change', drawJudge));
+$('ratePeriod').addEventListener('change', e => {
+  S.config.rate_period = e.target.value;
+  markDirty('config', `常設の率を出す期間を変更 (${e.target.value})`);
+});
+[['klRates', 'kanlog_rates', 'ドロップ率に艦ろぐの件数を足す'], ['klLimited', 'kanlog_limited', '艦ろぐの期間限定の印を使う'], ['klAuto', 'kanlog_auto_update', '艦ろぐを取ったら再集計する']].forEach(([id, key, what]) =>
+  $(id).addEventListener('change', e => { S.config[key] = e.target.checked; markDirty('config', `${what}: ${e.target.checked ? 'する' : 'しない'}`); renderKanlog(); }));
+$('klxAdd').addEventListener('click', () => {
+  const e = { map: $('klxMap').value, node: $('klxNode').value.trim().toUpperCase(), ship: $('klxShip').value.trim() ? canon($('klxShip').value) : '' };
+  if (!e.map) return toast('海域を選んでください', true);
+  if (e.ship && !e.node) return toast('艦名を入れるときはマスも入れてください', true);
+  if (S.config.kanlog_exclude.some(x => x.map === e.map && (x.node || '') === e.node && norm(x.ship || '') === norm(e.ship))) return toast('登録済みです', true);
+  S.config.kanlog_exclude.push(e);
+  $('klxNode').value = ''; $('klxShip').value = '';
+  markDirty('config', `艦ろぐを使わない ${e.map}${e.node ? '-' + e.node : ''} ${e.ship}`); renderKanlog(); renderJudge();
+});
+$('klRun').addEventListener('click', async e => {
+  e.target.disabled = true;
+  try { await api('/api/kanlog/run', {}); toast('艦ろぐの取得を始めました。取れたら再集計も自動で始まります（合わせて数分）'); setTimeout(loadKanlog, 6000); watchRuns(); }
+  catch (err) { toast(err.message, true); }
+  finally { setTimeout(() => { e.target.disabled = false; }, 8000); }
+});
+$('klReload').addEventListener('click', () => loadKanlog());
 $('histMonths').addEventListener('change', e => {
   S.config.history_months = Number(e.target.value);
   markDirty('config', `常設を判定する期間を ${e.target.value} か月に変更`);
@@ -864,4 +953,4 @@ $('logoutForm').addEventListener('submit', () => dirty.clear());
 window.addEventListener('pagehide', () => clearInterval(watchTimer));
 
 initLayout();
-loadAll().then(loadRuns).catch(e => toast(e.message, true));
+loadAll().then(() => Promise.all([loadRuns(), loadKanlog()])).catch(e => toast(e.message, true));
