@@ -42,6 +42,7 @@ HISTORY_MONTHS = 12       # 常設の判定に使う期間 (か月)。admin_conf
 ARCHIVE_PER_RUN = 6       # 1 回の実行で取り込む過去月の数。残りがあれば GitHub Actions が続けて自分を起動する
 DAY = 86400
 WEEK = 7 * DAY
+RECENT_DROPS = 20          # 「最後に出たころの率」を出すのに使うドロップ数
 GAP_EXPECT = 8            # その期間に「8 回以上は出るはず」なのに 0 回なら、本当に出ていないとみなす (偶然 0 回の確率は約 0.03%)
 NEW_DAYS = 60             # 出始めてからこの日数より短いものは「最近出始めた」(限定の可能性) とする
 RATE_MODES = ("node_s", "node_all", "map_all")
@@ -682,7 +683,15 @@ def classify_series(c, n, now, w0):
     span_n = sum(n[first:last + 1]) or 1
     r = sum(c[first:last + 1]) / span_n
     lead = r * sum(n[:first])
-    trail = r * sum(n[last + 1:])
+    # 出なくなったかどうかは「最後に出たころの率」で見る。率は年々下がる艦が多く (表に艦が増えるため)、
+    # 3 年の平均で見ると、出るはずの回数を多く見積もって早く「出なくなった」としてしまう。
+    # 最後に出た週から、RECENT_DROPS 件たまるまでさかのぼった期間の率と、全体の率の小さい方を使う
+    w, got = last, 0
+    while w > first and got < RECENT_DROPS:
+        got += c[w]
+        w -= 1
+    rt = min(r, sum(c[w:last + 1]) / (sum(n[w:last + 1]) or 1))
+    trail = rt * sum(n[last + 1:])
     # seg: 今続いている出方が始まった週 (途切れた期間の後、または出始め)。0 なら期間のはじめから
     seg = first if lead >= GAP_EXPECT else 0
     gap, run = 0.0, 0.0
@@ -710,7 +719,7 @@ def classify_series(c, n, now, w0):
     else:
         cls = "continuous"
     return {"cls": cls, "C": C, "seg": (w0 + seg * WEEK) if seg else None,
-            "segs": [(b - a + 1) for a, b in segs], "lw": last, "fw": first, "r": r}
+            "segs": [(b - a + 1) for a, b in segs], "lw": last, "fw": first, "r": r, "rt": rt}
 
 
 # 勝利ランクごとの判定をまとめるときの優先順 (どれかのランクで今も出ていれば出ている)
@@ -796,9 +805,9 @@ def judge_pairs(states, months, now):
             exp = 0.0
             for k, x in res.items():
                 n = (nS, nO)[0 if k == "S" else 1]
-                if x["cls"] == "stopped" and x["r"] * sum(n[x["lw"] + 1:L + 1]) >= GAP_EXPECT:
+                if x["cls"] == "stopped" and x["rt"] * sum(n[x["lw"] + 1:L + 1]) >= GAP_EXPECT:
                     continue
-                exp += x["r"] * sum(n[L + 1:])
+                exp += x["rt"] * sum(n[L + 1:])
             if exp >= GAP_EXPECT:
                 res = {k: x for k, x in res.items() if x["cls"] in ("stopped", "misreport")}
         best = min(res.items(), key=lambda kv: CLS_ORDER.index(kv[1]["cls"]))
