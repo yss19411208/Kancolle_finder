@@ -46,6 +46,11 @@
       "map": "1-1",
       "node": "C",
       "ship": "瑞穂"
+    },
+    {
+      "map": "4-5",
+      "node": "T",
+      "ship": "翔鶴"
     }
   ],
   "auto_resident_exclude": [
@@ -61,5 +66,10 @@
     }
   ],
   "resident_force": [],
-  "history_months": 36
+  "history_months": 36,
+  "kanlog_rates": true,
+  "kanlog_limited": true,
+  "kanlog_auto_update": true,
+  "kanlog_exclude": [],
+  "rate_period": "table"
 }
