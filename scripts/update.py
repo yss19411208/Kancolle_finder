@@ -710,7 +710,7 @@ def classify_series(c, n, now, w0):
     else:
         cls = "continuous"
     return {"cls": cls, "C": C, "seg": (w0 + seg * WEEK) if seg else None,
-            "segs": [(b - a + 1) for a, b in segs]}
+            "segs": [(b - a + 1) for a, b in segs], "lw": last, "fw": first, "r": r}
 
 
 # 勝利ランクごとの判定をまとめるときの優先順 (どれかのランクで今も出ていれば出ている)
@@ -783,8 +783,30 @@ def judge_pairs(states, months, now):
             x = classify_series(c, n, now, w0)
             if x:
                 res["S" if ri == 0 else "AB"] = x
+        # ランクごとの判定をまとめる。
+        # 片方のランク (多くは S) で「出なくなった」とはっきり分かるとき、もう片方 (多くは戦闘の少ない A/B) が
+        # 「出ている」と言えるのは、そちらで止まった後にも出ている場合だけ。A/B の戦闘が少ないマスでは
+        # A/B 側は何か月出なくても「出なくなった」と言えないため、それだけで常設に残してしまわないようにする
+        # そこで、どちらかのランクで「出なくなった」ときは、艦として最後に出た週より後に
+        # 「S と A/B を合わせて何回出るはずだったか」を数え、GAP_EXPECT 回以上なら艦として出なくなったとみなす
+        if any(x["cls"] == "stopped" for x in res.values()):
+            # (ただし、そのランクがもっと前に単独で止まっていたなら — 例えば S では前から出なくなり、A/B でだけ
+            #  出続けている艦 — その後のそのランクの戦闘は数えない。艦が両方の表から一緒に外れた場合だけ足す)
+            L = max(x["lw"] for x in res.values())
+            exp = 0.0
+            for k, x in res.items():
+                n = (nS, nO)[0 if k == "S" else 1]
+                if x["cls"] == "stopped" and x["r"] * sum(n[x["lw"] + 1:L + 1]) >= GAP_EXPECT:
+                    continue
+                exp += x["r"] * sum(n[L + 1:])
+            if exp >= GAP_EXPECT:
+                res = {k: x for k, x in res.items() if x["cls"] in ("stopped", "misreport")}
         best = min(res.items(), key=lambda kv: CLS_ORDER.index(kv[1]["cls"]))
-        C = sum(x["C"] for x in res.values())
+        C = sum(sum(c) for c in rec["c"])
+        # 誤報告: ランク別では戦闘数が足りなくても、S と A/B を合わせて十分な戦闘があるのに 2 件以下
+        fw = min(x["fw"] for x in res.values())
+        if C <= 2 and best[1]["cls"] != "misreport" and sum(nS[fw:]) + sum(nO[fw:]) >= SINGLE_MIN_BATTLES:
+            best = (best[0], dict(best[1], cls="misreport"))
         out[(m, node, sid)] = {
             "cls": best[1]["cls"], "rank": best[0], "C": C, "N": sum(nS) + sum(nO),
             "first": rec["b0"], "last": rec["b1"], "seg": best[1]["seg"], "segs": best[1]["segs"],
