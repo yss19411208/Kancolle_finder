@@ -1,0 +1,58 @@
+name: 艦ろぐの取得
+
+# 艦ろぐ (https://kanlog.info/) は奇数時 (日本時間) に更新される。運営者の方から
+# 「2 時間に 1 回程度・更新が終わった時間帯 (11:10 など)」の取得の許可をいただいているので、
+# 奇数時の 10 分過ぎ (= UTC の偶数時 10 分) に取りに行く。
+# 取ったページは kanlog ブランチ (履歴を残さない) に置き、データ更新 (update.yml) が読み取る。
+on:
+  schedule:
+    - cron: "10 0-22/2 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "サイトが更新されていなくても、海域のページを取りに行く"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kanlog
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 前回の取得結果 (kanlog ブランチ) を読み込む
+        run: |
+          if git ls-remote --exit-code --heads origin kanlog >/dev/null 2>&1; then
+            git clone --quiet --depth 1 --branch kanlog \
+              "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" kanlog
+            rm -rf kanlog/.git
+          else
+            mkdir -p kanlog
+          fi
+
+      - name: 艦ろぐのページを取得
+        run: python scripts/fetch_kanlog.py --out kanlog ${{ inputs.force && '--force' || '' }}
+
+      - name: kanlog ブランチに保存 (履歴は残さない)
+        run: |
+          cd kanlog
+          git init --quiet -b kanlog
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit --quiet -m "艦ろぐ $(TZ=Asia/Tokyo date '+%Y/%m/%d %H:%M')"
+          git push --quiet --force \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" kanlog
