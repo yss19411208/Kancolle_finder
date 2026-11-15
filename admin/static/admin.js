@@ -478,8 +478,9 @@ const JG_WHY = { continuous: '', added: '', was_limited: '限定は終了済み�
 let jgRows = [];
 const JG_WHY_KL = { kanlog: '艦ろぐで期間限定', kanlog_only: '艦ろぐだけで出ている' };
 Object.assign(JG_WHY, JG_WHY_KL);
-// poi と艦ろぐの率が 2 倍以上違う (どちらも 30 件以上あるもの)
-const klDiff = r => r.poi_rate > 0 && r.kl_rate > 0 && r.kl >= 30 && r.drops >= 30 && Math.max(r.poi_rate, r.kl_rate) / Math.min(r.poi_rate, r.kl_rate) >= 2;
+// poi と艦ろぐの率の違いが、艦ろぐの件数の少なさ (偶然のぶれ) では説明できないほど大きいもの。
+// 同じ期間の S 勝利で比べた z 値が ±4 以上 (偶然なら 1 万回に 1 回もない)
+const klDiff = r => r.kl_z != null && Math.abs(r.kl_z) >= 4;
 const pct = x => x == null ? '—' : (x >= 10 ? x.toFixed(1) : x >= 0.1 ? x.toFixed(2) : x.toFixed(3)) + '%';
 function klCell(r) {
   if (r.kl == null) return el('td', { class: 'sub' }, '艦ろぐに記録なし');
@@ -502,7 +503,7 @@ function renderJudge() {
     ['常設として公開', cnt(pub), 'pub常設'], ['限定として公開', cnt(r => r.published === '限定'), 'pub限定'],
     ['限定の可能性', cnt(r => r.lim && pub(r)), 'limcand'], ['報告が偏っている', cnt(r => !!r.suspect), 'suspect'],
     ['承認待ち', cnt(r => r.why === 'hold'), 'hold'], ['出なくなった', cnt(r => r.class === 'stopped'), 'stopped'],
-    ['艦ろぐで限定', cnt(r => !!r.kl_lim), 'kllim'], ['艦ろぐだけ', cnt(r => r.why === 'kanlog_only'), 'klonly'], ['poi と艦ろぐで率が違う', cnt(klDiff), 'kldiff'],
+    ['艦ろぐで限定', cnt(r => !!r.kl_lim), 'kllim'], ['艦ろぐだけ', cnt(r => r.why === 'kanlog_only'), 'klonly'], ['艦ろぐと率がはっきり違う', cnt(klDiff), 'kldiff'],
     ['Wiki と食い違う', cnt(r => (r.wiki && !pub(r)) || (!r.wiki && pub(r))), 'check'],
   ];
   $('jgSummary').replaceChildren(...items.map(([k, v, view]) => el('button', { type: 'button', class: 'chip', title: 'この一覧を表示', on: { click: () => { $('jgView').value = view; drawJudge(); } } }, el('b', {}, Number(v).toLocaleString()), el('span', {}, k))));

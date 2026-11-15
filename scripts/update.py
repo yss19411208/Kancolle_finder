@@ -46,6 +46,7 @@ GAP_EXPECT = 8            # その期間に「8 回以上は出るはず」な�
 NEW_DAYS = 60             # 出始めてからこの日数より短いものは「最近出始めた」(限定の可能性) とする
 RATE_MODES = ("node_s", "node_all", "map_all")
 # 艦ろぐ: 運営者の方のご希望で、出典は「艦ろぐ」へのリンクのみ (データの提供元の名前は書かない)
+TABLE_MIN_DAYS = 30     # 「今のドロップ表になってから」で率を出すのは、表が変わって 30 日たってから
 KL_SETTLED_DAYS = 120   # poi でこの日数より前から出続けている艦は、艦ろぐの「期間限定」の印があっても常設のまま
 KANLOG_SOURCE = {"name": "艦ろぐ", "url": "https://kanlog.info/", "use": "ドロップ率・期間限定の確認"}
 
@@ -1246,6 +1247,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
             add_kl = kl_rates and use_kl
             # 常設の率を出す期間: 今の出方が始まってから (seg)、または今のドロップ表になってから (艦ろぐの集計開始) の新しい方
             tbl = kl_start_ts(m) if cfg.get("rate_period") == "table" else None
+            if tbl and tbl > now - TABLE_MIN_DAYS * DAY:
+                tbl = None      # 表が変わって日が浅い (限定の追加などで艦ろぐが数え直した直後) うちは、件数が少なすぎるので使わない
             wstart = max(j.get("seg") or 0, tbl or 0) or None
             if pub == "常設":
                 seg = wstart
@@ -1292,6 +1295,16 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
                 else:
                     poi_r = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m, map_den_all[m])[0] if (nS + nO) else None
                 raw = kln_raw["ships"].get(str(sid), [0, 0]) if kln_raw else [0, 0]
+                # poi と艦ろぐの S 勝利のドロップ率が、偶然では説明できないほど違うか (同じ期間で比べる。z 値)
+                kl_z = None
+                t0 = kl_start_ts(m) if kln_raw else None
+                if t0 and kln_raw["tot"][0]:
+                    pa, _, pc, _ = seg_sum(m, node, sid, t0)
+                    n2, c2_ = kln_raw["tot"][0], raw[0]
+                    if pa and pc + c2_:
+                        pp = (pc + c2_) / (pa + n2)
+                        se = (pp * (1 - pp) * (1 / pa + 1 / n2)) ** 0.5
+                        kl_z = round((c2_ / n2 - pc / pa) / se, 1) if se else None
                 kl_r = (rate(raw[0], raw[1], kln_raw["tot"][0], kln_raw["tot"][1], m, kl_map_den(m) or sum(kln_raw["tot"]))[0]
                         if (kln_raw and sum(kln_raw["tot"])) else None)
                 judge_rows.append([m, node, nm, cls, j.get("C", 0), j.get("N", 0),
@@ -1301,7 +1314,7 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
                                    (raw[0] + raw[1]) if kln_raw else None, sum(kln_raw["tot"]) if kln_raw else None,
                                    (kln_raw["lim"].get(str(sid), "") if kln_raw else ""),
                                    (kln_raw["last"].get(str(sid), "") if kln_raw else ""), poi_r, kl_r,
-                                   int(k3 in kl_ex or m in kl_ex_maps)])
+                                   int(k3 in kl_ex or m in kl_ex_maps), kl_z])
         # 手動で追加した限定 (追加日時が基準日時より前のものは自動的に外れる)
         for e in cfg["limited_manual"]:
             if e.get("map") != m or e.get("node") != node or not e.get("ship"):
@@ -1324,7 +1337,7 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
             x = tot[(m, node)]
             judge_rows.append([m, node, nm, "none", 0, x[0] + x[1], "", "", 1, "", "", "none", "", "", "", "",
                                f"Wiki の出撃ドロップには載っているが、判定期間（{hist[0]}〜{hist[-1]}）の"
-                               f"戦闘 {x[0] + x[1]:,} 回で 1 回も出ていない", None, None, "", "", None, None, 0])
+                               f"戦闘 {x[0] + x[1]:,} 回で 1 回も出ていない", None, None, "", "", None, None, 0, None])
 
     rejected = sum(v for mo in hist for nodes in states[mo].get("rej", {}).values()
                    for rs in nodes.values() for v in rs.values())
@@ -1359,7 +1372,7 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
         "labels": JUDGE_LABEL,
         "columns": ["map", "node", "ship", "class", "drops", "battles", "first", "last", "wiki", "page", "published", "why",
                     "rank", "change", "lim", "suspect", "reason",
-                    "kl", "kl_n", "kl_lim", "kl_last", "poi_rate", "kl_rate", "kl_off"],
+                    "kl", "kl_n", "kl_lim", "kl_last", "poi_rate", "kl_rate", "kl_off", "kl_z"],
         "rows": judge_rows,
     }
     return data, judge
