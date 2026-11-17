@@ -593,6 +593,7 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 .drop-star { font-size: 13px; }
 .fleet-drop { flex-basis: 100%; font-size: 12px; color: #6b4a00; font-weight: 600; margin-top: 3px; }
 .fleet-drop.none { color: var(--text-sub); font-weight: 400; }
+.old-fleet { font-size: 11px; color: var(--text-sub); border: 1px dashed var(--border); border-radius: 3px; padding: 0 5px; align-self: center; }
 .fleet-line { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
 .en-chip { background: #fff; border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-size: 12px; white-space: nowrap; }
 .en-chip.flag { border-color: var(--navy2); font-weight: 700; }
@@ -1438,7 +1439,7 @@ function fleetTable(ids, D, label) {
 }
 function renderEnemy(map, node) {
   const D = enemyData, v = D?.maps?.[map]?.[node];
-  loadEnemyDrops(map).then(dd => renderEnemyWith(map, node, D, v, (dd || {})[node] || []));
+  loadEnemyDrops(map).then(dd => renderEnemyWith(map, node, D, v, (dd || {})[node] || {}));
 }
 function renderEnemyWith(map, node, D, v, fdrops) {
   const boss = nodeMeta[map]?.[node]?.boss;
@@ -1449,32 +1450,39 @@ function renderEnemyWith(map, node, D, v, fdrops) {
   let h = `<p class="enemy-note">${mo}にこのマスで勝った記録 ${v.n.toLocaleString()} 件から、出た割合の多い順に並べています（0.5% 未満のものは省略）。`
     + `敵艦の性能は KC3改のデータです。</p>`;
   const sh = enemyShip;
-  const got = i => (fdrops[i] || {})[sh] || [0, 0];
+  const si = sh ? (fdrops.ships || {})[sh] : null;     // 選んだ艦の「ドロップした編成」(期間を合わせて全記録から)
+  const fl = fdrops.fl || [];
+  const byCur = {};                                    // 今の編成一覧の番号 -> [S, A/B, S勝利数, A/B勝利数]
+  (si?.d || []).forEach(([fi, a, b, bS, bO]) => { if (fl[fi] && fl[fi].c >= 0) byCur[fl[fi].c] = [a, b, bS, bO]; });
+  const got = i => byCur[i] || null;
   if (sh) {
-    // 選んだ艦がドロップした編成のまとめ
-    const idx = v.fleets.map((f, i) => i).filter(i => got(i)[0] + got(i)[1] > 0);
-    const tS = v.fleets.reduce((a, f, i) => a + got(i)[0], 0), tO = v.fleets.reduce((a, f, i) => a + got(i)[1], 0);
-    h += `<div class="drop-sum"><div class="drop-sum-title">★ ${htmlEsc(sh)} がドロップした編成：${idx.length} / ${v.fleets.length} 編成`
-      + `（この期間に S 勝利 ${tS} 件・A/B 勝利 ${tO} 件）</div>`;
-    if (idx.length) {
+    const period = !si ? '' : si.lim ? `限定ドロップの期間（${si.from} 以降）` : '判定期間のすべての記録';
+    h += `<div class="drop-sum"><div class="drop-sum-title">★ ${htmlEsc(sh)} がドロップした編成`
+      + (si ? `：${si.d.length} 編成（${period}・このマス ${si.n.toLocaleString()} 戦のうち S 勝利 ${si.tot[0]} 件・A/B 勝利 ${si.tot[1]} 件）` : '') + '</div>';
+    if (si && si.d.length) {
       h += '<table class="drop-sum-table"><thead><tr><th></th><th>編成</th><th>出た割合</th><th>S 勝利でのドロップ率</th><th>A/B 勝利でのドロップ率</th></tr></thead><tbody>';
-      for (const i of idx.sort((a, b) => (got(b)[0] + got(b)[1]) - (got(a)[0] + got(a)[1]))) {
-        const f = v.fleets[i], [a, b] = got(i);
-        h += `<tr onclick="document.getElementById('fleet_${i}').scrollIntoView({behavior:'smooth',block:'start'})">`
-          + `<td class="star">★</td><td>${lineup(f.s, D)}${f.s2 && f.s2.length ? `<span class="fleet-sep">随伴</span>${lineup(f.s2, D)}` : ''}</td>`
-          + `<td>${f.r}%</td><td><b>${pctE(a, f.b?.[0])}</b><span class="sub">（${a} / ${(f.b?.[0] || 0).toLocaleString()}）</span></td>`
-          + `<td><b>${pctE(b, f.b?.[1])}</b><span class="sub">（${b} / ${(f.b?.[1] || 0).toLocaleString()}）</span></td></tr>`;
+      for (const [fi, a, b, bS, bO, r] of si.d) {
+        const f = fl[fi] || { s: [], s2: [], c: -1 };
+        h += `<tr${f.c >= 0 ? ` onclick="document.getElementById('fleet_${f.c}').scrollIntoView({behavior:'smooth',block:'start'})"` : ''}>`
+          + `<td class="star">★</td><td>${lineup(f.s, D)}${f.s2 && f.s2.length ? `<span class="fleet-sep">随伴</span>${lineup(f.s2, D)}` : ''}`
+          + (f.c < 0 ? '<span class="old-fleet">今は出ていない編成</span>' : '') + '</td>'
+          + `<td>${r}%</td><td><b>${pctE(a, bS)}</b><span class="sub">（${a} / ${bS.toLocaleString()}）</span></td>`
+          + `<td><b>${pctE(b, bO)}</b><span class="sub">（${b} / ${bO.toLocaleString()}）</span></td></tr>`;
       }
       h += '</tbody></table>';
+      if (si.other && si.other[0] + si.other[1])
+        h += `<div class="enemy-note">ほかに、まれな編成（出た割合 0.5% 未満）などで S 勝利 ${si.other[0]} 件・A/B 勝利 ${si.other[1]} 件</div>`;
     } else {
-      h += '<div class="enemy-note">この期間の記録では、どの編成でもまだ出ていません。</div>';
+      h += `<div class="enemy-note">${si ? `${period}の記録では、まだ出ていません。` : 'このマスでこの艦が出た記録はありません。'}</div>`;
     }
-    h += '<div class="enemy-note">ドロップ率は、その編成と戦って S 勝利（または A/B 勝利）した回数のうち、この艦が出た割合です（上の期間の分。公開している率とは期間が違うことがあります）。</div></div>'
-      + '<div class="enemy-section">このマスの編成（すべて）</div>';
+    h += '<div class="enemy-note">ドロップ率は、その編成と戦って S 勝利（または A/B 勝利）した回数のうち、この艦が出た割合です。'
+      + '常設の艦は判定期間のすべての記録、限定の艦は最新のアップデート以降の記録で数えています。</div></div>'
+      + '<div class="enemy-section">このマスの今の編成（すべて）</div>';
   }
   v.fleets.forEach((f, i) => {
     const fm = f.fm.map(([k, r]) => `${FM[k] || '陣形' + k}${f.fm.length > 1 ? ` ${r}%` : ''}`).join('・');
-    const [a, b] = got(i), hit = sh && a + b > 0;
+    const g = got(i), hit = !!(sh && g);
+    const [a, b, bS, bO] = g || [0, 0, 0, 0];
     h += `<div class="fleet${hit ? ' dropped' : ''}" id="fleet_${i}"><div class="fleet-head">`
       + (hit ? '<span class="drop-star">★ ドロップした編成</span>' : '')
       + `<span class="fleet-share">${f.r}%</span>`
@@ -1482,8 +1490,8 @@ function renderEnemyWith(map, node, D, v, fdrops) {
       + `<span class="fleet-meta">${fm || '陣形不明'}${f.exp ? `・基本経験値 ${f.exp}` : ''}・${f.k.toLocaleString()} 件</span>`
       + `<div class="fleet-line">${lineup(f.s, D)}${f.s2 && f.s2.length ? `<span class="fleet-sep">随伴</span>${lineup(f.s2, D)}` : ''}</div>`
       + (sh ? `<div class="fleet-drop${hit ? '' : ' none'}">${hit
-          ? `${htmlEsc(sh)}：S 勝利 ${pctE(a, f.b?.[0])}（${a} / ${(f.b?.[0] || 0).toLocaleString()}）・A/B 勝利 ${pctE(b, f.b?.[1])}（${b} / ${(f.b?.[1] || 0).toLocaleString()}）`
-          : `${htmlEsc(sh)} はこの編成ではまだ出ていない（S 勝利 ${(f.b?.[0] || 0).toLocaleString()} 戦・A/B 勝利 ${(f.b?.[1] || 0).toLocaleString()} 戦）`}</div>` : '')
+          ? `${htmlEsc(sh)}：S 勝利 ${pctE(a, bS)}（${a} / ${bS.toLocaleString()}）・A/B 勝利 ${pctE(b, bO)}（${b} / ${bO.toLocaleString()}）`
+          : `${htmlEsc(sh)} はこの編成ではまだ出ていない`}</div>` : '')
       + '</div>'
       + (f.s2 && f.s2.length ? fleetTable(f.s, D, '主力艦隊') + fleetTable(f.s2, D, '随伴艦隊') : fleetTable(f.s, D, ''))
       + '</div>';

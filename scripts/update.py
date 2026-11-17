@@ -69,6 +69,8 @@ KC3_EDGES_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data
 KC3_ABYSSAL_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/abyssal_stats.json"
 # 敵編成: 1 か月・1 マスあたり、保存する編成の数と、表示する編成の割合の下限
 COMP_KEEP = 20
+COMP_VERSION = 2         # 2: 編成ごとに出た艦を、アップデート日時 (cuts) で区切った期間ごとに持つ
+COMP_SHIP_KEEP = 15      # 艦ごとに出す「ドロップした編成」の数
 COMP_MIN_SHARE = 0.005
 COMP_MIN_RECORDS = 300   # 当月の記録がこれより少ないマスは、前の月の分も合わせて出す
 FORMATIONS = {1: "単縦陣", 2: "複縦陣", 3: "輪形陣", 4: "梯形陣", 5: "単横陣", 6: "警戒陣",
@@ -389,7 +391,7 @@ def aggregate_drops(path, routes, cuts=()):
     total = used = 0
     fcnt = defaultdict(int)      # (month, mapId, cell, 敵編成) -> n
     # (month, mapId, cell, 本隊, 随伴, 陣形, 艦隊名) -> [n, 基本経験値, S勝利数, A/B勝利数, {艦ID: [S, A/B]}]
-    comp = defaultdict(lambda: [0, 0, 0, 0, defaultdict(lambda: [0, 0])])
+    comp = defaultdict(lambda: [0, 0, 0, 0, defaultdict(lambda: [0, 0])])   # キーの最後に期間の開始 (cuts で区切る)
     hold = {}                    # 同上 -> [(bk, rc, sid)] (FLEET_HOLD 回まで)
     rej = defaultdict(int)       # (month, mapId, cell, 理由) -> n
     repo = {}                    # (month, mapId, cell, sid) -> [set(報告者), Counter(ツール), Counter(時)]
@@ -435,8 +437,10 @@ def aggregate_drops(path, routes, cuts=()):
         fk = (mo, map_id, cell, fleet)
         fcnt[fk] += 1
         try:
+            ci = bisect.bisect_right(cuts, ts)
+            sg = cuts[ci - 1] if ci and cuts[ci - 1] >= month_start(mo) - 9 * 3600 else month_start(mo) - 9 * 3600
             ck = (mo, map_id, cell, fleet, tuple(d.get("enemyShips2") or ()),
-                  int(d.get("enemyFormation") or 0), str(d.get("enemy") or "")[:30])
+                  int(d.get("enemyFormation") or 0), str(d.get("enemy") or "")[:30], sg)
             cv = comp[ck]
             cv[0] += 1
             cv[1] = max(cv[1], int(d.get("baseExp") or 0))
@@ -516,7 +520,7 @@ def aggregate_drops(path, routes, cuts=()):
     for mo, (n, first, last) in meta.items():
         out[mo] = {"v": STATE_VERSION, "month": mo, "records": n, "first": first, "last": last,
                    "cuts": cuts, "final": False, "tot": {}, "dden": {}, "dsid": {}, "lastdrop": {},
-                   "rep": {}, "orig": {}, "rej": {}, "comp": {}}
+                   "rep": {}, "orig": {}, "rej": {}, "comp": {}, "compv": COMP_VERSION}
     unknown = set()
     for (mo, map_id, cell, rc, sid), n in cnt.items():
         m, node = place(map_id, cell)
@@ -571,9 +575,9 @@ def aggregate_drops(path, routes, cuts=()):
     # 敵編成: マスごと (セル番号違いの同じマスは足す) に、多い順に COMP_KEEP 個まで
     # 編成ごとに、その編成の戦闘で出た艦の数も残す (「この編成で出た」「この編成での率」の表示用)
     tmp = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, defaultdict(lambda: [0, 0])]))
-    for (mo, map_id, cell, f1, f2, fm, nm), (n, ex, bS, bO, dr) in comp.items():
+    for (mo, map_id, cell, f1, f2, fm, nm, sg), (n, ex, bS, bO, dr) in comp.items():
         m, node = place(map_id, cell)
-        v = tmp[(mo, m, node)][(f1, f2, fm, nm)]
+        v = tmp[(mo, m, node)][(f1, f2, fm, nm, sg)]
         v[0] += n
         v[1] = max(v[1], ex)
         v[2] += bS
@@ -585,21 +589,24 @@ def aggregate_drops(path, routes, cuts=()):
         if mo not in out:
             continue
         tot = sum(v[0] for v in fl.values())
-        top = sorted(fl.items(), key=lambda kv: -kv[1][0])[:COMP_KEEP]
+        # 期間 (アップデートで区切った区間) ごとに、多い順に COMP_KEEP 個まで
+        bysg = defaultdict(list)
+        for kk, vv in fl.items():
+            bysg[kk[4]].append((kk, vv))
+        top = [x for lst in bysg.values() for x in sorted(lst, key=lambda kv: -kv[1][0])[:COMP_KEEP]]
         out[mo]["comp"].setdefault(m, {})[node] = {
-            "n": tot, "f": [[list(f1), list(f2), fm, nm, n, ex, bS, bO, {str(k): v for k, v in dr.items()}]
-                            for (f1, f2, fm, nm), (n, ex, bS, bO, dr) in top]}
+            "n": tot, "f": [[list(f1), list(f2), fm, nm, n, ex, bS, bO, {str(k): v for k, v in dr.items()}, sg]
+                            for (f1, f2, fm, nm, sg), (n, ex, bS, bO, dr) in top]}
     if unknown:
         warn("マス名が不明なセルがあります (#番号で表示): " + ", ".join(sorted(unknown)[:30]))
     return out
 
 
-def build_enemy_data(states, now, ships_by_id=None):
+def build_enemy_data(states, now, ships_by_id=None, judge=None, cutoff=None):
     """公開ページの「敵編成」用 (data/enemy.json)。最新の月 (記録が少ないマスは前の月も合わせて) の敵編成を、
     出た割合の多い順に出す。誤記録のような、ほとんど出ない編成 (COMP_MIN_SHARE 未満) は出さない。"""
     em = load_json(os.path.join(ROOT, "data", "enemy_master.json"), {}) or {}
     ships_by_id = ships_by_id or {}
-    drops = {}      # 海域 -> マス -> [編成ごとの {艦名: [S, A/B]}] (fleets と同じ並び)
     months = sorted((mo for mo, st in states.items() if st.get("comp")), reverse=True)
     maps, used = {}, set()
     places = {(m, node) for mo in months[:2] for m, v in states[mo]["comp"].items() for node in v}
@@ -645,19 +652,11 @@ def build_enemy_data(states, now, ships_by_id=None):
                        if k / g["k"] >= 0.02]
                 fl.append({"s": list(f1), "s2": list(f2), "nm": nm, "r": round(g["k"] / n * 100, 1), "k": g["k"],
                            "exp": g["exp"], "fm": fms, "b": g["b"]})
-                # この編成で出た艦 (艦名 -> [S, A/B]) は海域ごとの別ファイルへ
-                dd = {}
-                for sid, ab in g["d"].items():
-                    nm_ = (ships_by_id.get(str(sid)) or {}).get("name")
-                    if nm_:
-                        x = dd.setdefault(nm_, [0, 0])
-                        x[0] += ab[0]
-                        x[1] += ab[1]
-                drops.setdefault(m, {}).setdefault(node, []).append(dd)
                 used.update(f1)
                 used.update(f2)
         if fl:
             maps.setdefault(m, {})[node] = {"n": n, "months": sorted(src), "fleets": fl}
+    drops = build_enemy_drops(states, maps, ships_by_id, judge, cutoff, used)
     ships = {str(i): em[str(i)] for i in sorted(used) if str(i) in em}
     for i in sorted(used):
         ships.setdefault(str(i), {"n": f"#{i}", "y": "", "t": ""})
@@ -668,6 +667,97 @@ def build_enemy_data(states, now, ships_by_id=None):
                          "use": "敵艦の耐久・装甲・火力など"},
                         {"name": "api_start2 (Tibowl)", "url": "https://github.com/Tibowl/api_start2", "use": "敵艦の名前・艦種"}],
             "ships": ships, "maps": maps}, drops
+
+
+def build_enemy_drops(states, maps, ships_by_id, judge, cutoff, used):
+    """艦ごとの「ドロップした編成」(data/enemy_drop/海域.json)。
+    常設の艦は判定期間のすべての記録、限定の艦は最新のアップデート以降 (限定ドロップの期間) の記録で、
+    その艦が出た編成と、その編成で S / A/B 勝利したうちの何回出たか (ドロップ率) を出す。
+    {マス: {"fl": [{s, s2, nm, c: 今の編成一覧 (enemy.json) での番号 or -1}],
+            "ships": {艦名: {"from": 期間の開始 or "", "lim": 0/1, "n": 期間の記録数, "tot": [S, A/B],
+                             "d": [[fl の番号, S で出た数, A/B で出た数, S 勝利数, A/B 勝利数, 出た割合%]],
+                             "other": [S, A/B]}}}}"""
+    name_of = {str(k): v.get("name") for k, v in (ships_by_id or {}).items()}
+    sid_of = {v: k for k, v in name_of.items() if v}
+    cols = (judge or {}).get("columns", [])
+    pubs = defaultdict(dict)        # (海域, マス) -> {艦ID: 期間の開始 (None = すべて)}
+    for r in (judge or {}).get("rows", []):
+        x = dict(zip(cols, r))
+        if x.get("published") not in ("常設", "限定") or x.get("ship") not in sid_of:
+            continue
+        lim = x["published"] == "限定"
+        pubs[(x["map"], x["node"])][sid_of[x["ship"]]] = (cutoff if (lim and cutoff) else None, lim)
+    # 編成の組み合わせごとに全期間の記録を集める: (海域, マス) -> [(期間の開始, 編成キー, k, bS, bO, {艦ID: [S, A/B]})]
+    rows = defaultdict(list)
+    for mo in sorted(states):
+        for m, nodes in (states[mo].get("comp") or {}).items():
+            for node, c in nodes.items():
+                if (m, node) not in pubs:
+                    continue
+                for row in c["f"]:
+                    if len(row) < 9:
+                        continue
+                    sg = row[9] if len(row) >= 10 else month_start(mo) - 9 * 3600
+                    rows[(m, node)].append((sg, (tuple(row[0]), tuple(row[1]), row[3]), row[4], row[6], row[7], row[8]))
+    out = {}
+    for (m, node), lst in rows.items():
+        cur = {(tuple(f["s"]), tuple(f["s2"]), f["nm"]): i
+               for i, f in enumerate(((maps.get(m) or {}).get(node) or {}).get("fleets", []))}
+        aggs = {}
+
+        def agg(start):
+            if start not in aggs:
+                a, n = {}, 0
+                for sg, key, k, bS, bO, dr in lst:
+                    if start is not None and sg < start:
+                        continue
+                    v = a.setdefault(key, [0, 0, 0, {}])
+                    v[0] += k
+                    v[1] += bS
+                    v[2] += bO
+                    for sid, (x, y) in dr.items():
+                        w = v[3].setdefault(sid, [0, 0])
+                        w[0] += x
+                        w[1] += y
+                    n += k
+                aggs[start] = (a, n)
+            return aggs[start]
+        fl, fidx, ships = [], {}, {}
+        for sid, (start, lim) in pubs[(m, node)].items():
+            a, n = agg(start)
+            if not n:
+                continue
+            got = []
+            other = [0, 0]
+            tot = [0, 0]
+            for key, (k, bS, bO, dr) in a.items():
+                x = dr.get(str(sid))
+                if not x or not (x[0] + x[1]):
+                    continue
+                tot[0] += x[0]
+                tot[1] += x[1]
+                if k / n < COMP_MIN_SHARE:      # ほとんど出ない編成 (誤記録のことが多い) はまとめる
+                    other[0] += x[0]
+                    other[1] += x[1]
+                    continue
+                got.append((key, x, bS, bO, k))
+            got.sort(key=lambda t: -(t[1][0] + t[1][1]))
+            for key, x, bS, bO, k in got[COMP_SHIP_KEEP:]:
+                other[0] += x[0]
+                other[1] += x[1]
+            d = []
+            for key, x, bS, bO, k in got[:COMP_SHIP_KEEP]:
+                if key not in fidx:
+                    fidx[key] = len(fl)
+                    fl.append({"s": list(key[0]), "s2": list(key[1]), "nm": key[2], "c": cur.get(key, -1)})
+                    used.update(key[0])
+                    used.update(key[1])
+                d.append([fidx[key], x[0], x[1], bS, bO, round(k / n * 100, 1)])
+            ships[name_of[str(sid)]] = {"from": fmt_dt(start)[:16] if start else "", "lim": int(lim), "n": n,
+                                        "tot": tot, "d": d, "other": other}
+        if ships:
+            out.setdefault(m, {})[node] = {"fl": fl, "ships": ships}
+    return out
 
 
 # ---------------------------------------------------------------- 建造集計
@@ -1823,7 +1913,7 @@ def main():
     sig = hashlib.sha1(json.dumps([sorted(cuts), STATE_VERSION], sort_keys=True).encode()).hexdigest()
     # 当月の保存データに敵編成 (comp) が無いとき (この機能を入れた直後) は、取り直して作る
     _cm = (drop_states.get(month_of(now)) or {}).get("comp") or {}
-    has_comp = any(len(r) >= 9 for v in _cm.values() for c in v.values() for r in c["f"][:1])
+    has_comp = bool(_cm) and (drop_states.get(month_of(now)) or {}).get("compv") == COMP_VERSION
     skip_dump = (args.smart and meta.get("sig") == sig and now - meta.get("fetched_at", 0) < 20 * 3600
                  and month_of(now) in drop_states and has_comp)
     # 毎朝 5〜9 時に何度か起動するので、ダンプが前回から更新されていなければ取り直さない
@@ -1900,8 +1990,9 @@ def main():
                     continue
                 st = drop_states.get(mo)
                 in_month = cutoff is not None and month_start(mo) <= cutoff < month_start(next_month(mo))
-                if st and st.get("final") and (not in_month or cutoff in st.get("cuts", [])):
-                    continue   # 取り込み済み
+                if st and st.get("final") and (not in_month or cutoff in st.get("cuts", [])) \
+                        and st.get("compv") == COMP_VERSION:
+                    continue   # 取り込み済み (敵編成の記録が古い形式の月は、取り込み直す)
                 todo.append(mo)
             if len(todo) > ARCHIVE_PER_RUN:
                 notes.append(f"過去月は残り {len(todo) - ARCHIVE_PER_RUN} か月を次回以降に取り込みます")
@@ -2013,7 +2104,7 @@ def main():
 
     if not same(old_drop, drop):
         save_json(os.path.join(ROOT, "Drop_Data.json"), drop, compact=True)
-    enemy, edrops = build_enemy_data(drop_states, now, ships)
+    enemy, edrops = build_enemy_data(drop_states, now, ships, judge, effective_cutoff(cfg, now))
     epath = os.path.join(ROOT, "data", "enemy.json")
     if enemy["maps"] and not same(load_json(epath), enemy):
         save_json(epath, enemy, compact=True)
