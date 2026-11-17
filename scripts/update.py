@@ -47,8 +47,8 @@ GAP_EXPECT = 8            # その期間に「8 回以上は出るはず」な�
 NEW_DAYS = 60             # 出始めてからこの日数より短いものは「最近出始めた」(限定の可能性) とする
 RATE_MODES = ("node_s", "node_all", "map_all")
 # 艦ろぐ: 運営者の方のご希望で、出典は「艦ろぐ」へのリンクのみ (データの提供元の名前は書かない)
+LIM_WAIT_EXPECT = 3     # 限定で継続中なのにアップデート後まだ出ていない艦: 出るはずの回数がこれ未満なら載せたまま
 TABLE_MIN_DAYS = 30     # 「今のドロップ表になってから」で率を出すのは、表が変わって 30 日たってから
-KL_SETTLED_DAYS = 120   # poi でこの日数より前から出続けている艦は、艦ろぐの「期間限定」の印があっても常設のまま
 KANLOG_SOURCE = {"name": "艦ろぐ", "url": "https://kanlog.info/", "use": "ドロップ率・期間限定の確認"}
 
 SOURCES = [
@@ -642,7 +642,8 @@ def history_start(now, months):
 
 def load_limited_page():
     """期間限定ドロップのページ (data/limited_page.json) から、限定の艦を取り出す。
-    戻り値: (継続中 {(海域, マス, 艦)}, 継続中・海域単位 {(海域, 艦)}, 終了済み {(海域, マス|None, 艦): 終了日})"""
+    戻り値: (継続中 {(海域, マス, 艦)}, 継続中・海域単位 {(海域, 艦)}, 終了済み {(海域, マス|None, 艦): 終了日})
+    「○○では平時にもドロップする」と書かれたマスは WIKI_NORMAL に入れる (艦ろぐの限定の印より優先する)"""
     page = load_json(os.path.join(ROOT, "data", "limited_page.json"), {}) or {}
     events = page.get("events", [])
     on_node, on_map, ended = set(), set(), {}
@@ -657,7 +658,12 @@ def load_limited_page():
             end = (events[ei].get("end") if ei < len(events) else None) or ""
             k = (mp, nd, nn)
             ended[k] = max(ended.get(k, ""), end)
+    WIKI_NORMAL.clear()
+    WIKI_NORMAL.update((mp, nd, norm_name(n)) for mp, nd, n in page.get("normal", []))
     return on_node, on_map, ended
+
+
+WIKI_NORMAL = set()
 
 
 JUDGE_LABEL = {
@@ -1090,6 +1096,11 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
 
     _kl_md = {}
 
+    def lim_rate(m, node, sid, j):
+        """今の出方が始まってから (途切れた後なら再開してから) のドロップ率 (1 戦あたり)。"""
+        a, b, c1, c2 = seg_sum(m, node, sid, j.get("seg") or j["first"])
+        return (c1 + c2) / (a + b) if a + b else 0.0
+
     def kl_start_ts(m):
         """艦ろぐがその海域を集計し始めた日 (= 今のドロップ表になった日) の 0 時 (日本時間)。"""
         st = (KL.get(m) or {}).get("start")
@@ -1222,15 +1233,16 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
             cls = j.get("cls", "")
             if j and nS + nO < MIN_NODE_BATTLES:
                 cls = "fewnode"     # 戦闘の無いマス (資源マスなど) に紛れ込んだ記録。率も意味をなさない
-            page = ("ongoing" if (k3 in on_node or (m, nn) in on_map)
-                    else "ended" if (k3 in ended or (m, None, nn) in ended) else "")
+            kb = (m, "ボス", nn) if boss else None      # 限定ページの古い書き方「1-5ボス」
+            page = ("ongoing" if (k3 in on_node or (m, nn) in on_map or kb in on_node)
+                    else "ended" if (k3 in ended or (m, None, nn) in ended or kb in ended) else "")
+            lim_wait = False
             # 艦ろぐ: この艦の数と「期間限定」の印
             use_kl = bool(kln) and k3 not in kl_ex
             kl_lab = (kln["lim"].get(str(sid), "") if kln else "")
-            # 艦ろぐは、昔の限定で入ってそのまま常設になった艦 (2019 年の秋刀魚祭りの朝霜など) にも
-            # 「期間限定」の印を付けている。poi で 120 日以上前から出続けている艦は、印があっても常設のままにする
-            kl_settled = bool(j) and cls in ("continuous", "added", "intermittent") and j["first"] < now - KL_SETTLED_DAYS * DAY
-            kl_lim_use = kl_lab if (use_kl and not kl_settled) else ""
+            # 艦ろぐで「期間限定」の印が付いていれば、何年出続けていても限定にする
+            # (2019 年の秋刀魚祭りの朝霜のように、限定のまま何年も続いているものがある)
+            kl_lim_use = kl_lab if (use_kl and k3 not in WIKI_NORMAL) else ""   # Wiki で「平時にも出る」マスは除く
             klS, klO, klnS, klnO = kl_counts(m, node, sid) if use_kl else (0, 0, 0, 0)
             # 公開ページでの扱い
             if k3 in res_force:
@@ -1311,15 +1323,35 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
                         kl_map_den(m, start, strict=True) if add_kl and cutoff is not None else 0))
                     rows.append([nm, ti_of.get(sid, 7), 1, r, d, n, basis, why])
                     seen.add(nn)
+            elif k3 not in exclude and j and (nS + nO) and cls in ("continuous", "added", "intermittent", "new") \
+                    and j.get("C", 0) >= 5 and j["last"] >= now - 60 * DAY and \
+                    lim_rate(m, node, sid, j) * (ns_poi + no_poi + kls[2] + kls[3]) < LIM_WAIT_EXPECT:
+                # 限定ページ・艦ろぐで継続中なのに、アップデート後にまだ出ていない。ただ、もともと出にくい艦で
+                # 戦闘もまだ少なく、出るはずの回数が LIM_WAIT_EXPECT 回に届かない (1-6-J の磯風など) ので、
+                # 終わったとは言えない。それまでの率で載せておく
+                lim_wait = True
+                seg = wstart
+                if seg:
+                    a, b, c1, c2 = seg_sum(m, node, sid, seg)
+                    r, d, n, basis = rate(c1, c2, a, b, m, seg_map(m, seg))
+                else:
+                    r, d, n, basis = rate(dS.get(sid, 0), dO.get(sid, 0), nS, nO, m, map_den_all[m])
+                rows.append([nm, ti_of.get(sid, 7), 1, r, d, n, basis, why])
+                seen.add(nn)
             else:
                 pub = "除外" if k3 in exclude else ""
             if j or pub or (kln_raw and kln_raw["ships"].get(str(sid))):
                 nt = dict(notes.get((m, node, sid), {}))
-                if kl_lab and kl_settled and use_kl and pub == "常設":
+                if kl_lab and pub == "常設":
                     nt["lim"] = (nt.get("lim", "") + " / " if nt.get("lim") else "") + \
-                        f"艦ろぐでは「期間限定 {kl_lab}」（poi では {KL_SETTLED_DAYS} 日以上前から出続けているので常設のまま）"
+                        f"艦ろぐでは「期間限定 {kl_lab}」（" + ("Wiki の限定ページに、このマスでは平時にも出ると書かれているため常設）"
+                                                          if k3 in WIKI_NORMAL else "艦ろぐを使わない設定のため常設）")
                 reason = reason_text(pub, why, cls, j, nt, sus, ds + do, ns_poi + no_poi + kls[2] + kls[3],
                                      cutoff, nS + nO, kl_lab)
+                if lim_wait:
+                    reason = (("限定ページで継続中" if why == "page" else f"艦ろぐで「期間限定 {kl_lab}」" if why == "kanlog" else "限定")
+                              + f"。最新のアップデート（{fmt_dt(cutoff)[:16] if cutoff else '—'}）以降はまだ出ていないが、"
+                              f"もともと出にくく戦闘もまだ少ない（出るはずの回数が {LIM_WAIT_EXPECT} 回未満）ので、それまでの率で載せている")
                 if wstart:
                     a, b, c1, c2 = seg_sum(m, node, sid, wstart)
                     poi_r = rate(c1, c2, a, b, m, seg_map(m, wstart))[0] if a + b else None

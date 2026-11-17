@@ -685,7 +685,7 @@ function limitedEvents(map, node, ship) {
   const ev = page.events || [];
   const nn = norm(ship);
   const hits = (page.entries || [])
-    .filter(([m, n, s]) => m === map && (n === null || n === node) && norm(s) === nn)
+    .filter(([m, n, s]) => m === map && (n === null || n === node || (n === 'ボス' && ((S.drop.maps || {})[map] || {})[node]?.boss)) && norm(s) === nn)
     .map(([, , , ei, ended]) => ({ ...(ev[ei] || {}), ended: !!ended }));
   const seen = new Set();
   const list = hits.filter(h => { const k = h.title + h.start + h.ended; if (seen.has(k)) return false; seen.add(k); return true; })

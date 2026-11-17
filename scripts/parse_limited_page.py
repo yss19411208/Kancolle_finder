@@ -70,6 +70,88 @@ def ships_in(td):
         res.append((n, ended))
     return res
 
+BOSS = re.compile(r'(\d-\d)\s*ボス')
+
+
+def cell_areas(td):
+    """古い形式の「ドロップエリア」の欄: [(海域, マス|"ボス"|None, 灰色=終了か)]"""
+    res = []
+    for t in td.find_all(string=True):
+        par = t.parent
+        sty = ''
+        while par is not None and par is not td:
+            sty += (par.get('style') or '') if hasattr(par, 'get') else ''
+            par = par.parent
+        grey = bool(re.search(r'color:\s*(silver|gray|grey|#?(?:999|aaa|ccc|c0c0c0|808080))', sty, re.I)) or \
+            t.find_parent(['del', 's', 'strike']) is not None
+        txt = str(t)
+        for mm in BOSS.finditer(txt):
+            res.append((mm.group(1), 'ボス', grey))
+        for mp, node in areas(BOSS.sub('', txt)):
+            res.append((mp, node, grey))
+    return res
+
+
+def old_groups(li):
+    """li の中の表ごとに、その表の前に書かれた艦 [(艦名, 取り消し線=終了か)] を返す。{id(表): [...]}"""
+    out, cur = {}, []
+    for d in li.descendants:
+        if getattr(d, 'name', None) == 'table':
+            out[id(d)] = cur
+            cur = []
+        elif getattr(d, 'name', None) == 'a' and d.find_parent('table') is None:
+            n = names.get(norm_name(d.get_text(' ', strip=True)))
+            if n and n not in [x for x, _ in cur]:
+                cur.append((n, d.find_parent(['del', 's', 'strike']) is not None))
+    return out
+
+
+def section_notes(h2, status):
+    """見出しから次の見出しまでの文から、
+    normal: 「※2-5-O(ボス)…では平時にもドロップする」のマス (限定ではない)
+    cont:   「一部継続中」で「○○以降も 1-6-B、1-6-J における…ドロップは継続」と書かれたマス (ほかは終了)"""
+    txt, parts = '', []
+    for sib in h2.find_next_siblings():
+        if sib.name == 'h2': break
+        blocks = sib.find_all(['li', 'p']) or [sib]
+        for b in blocks:
+            parts.append(''.join(t for t in b.find_all(string=True)
+                                 if t.find_parent('table') is None and t.find_parent(['li', 'p']) in (b, None)))
+        txt += ' ' + ''.join(t for t in sib.find_all(string=True) if t.find_parent('table') is None)
+    normal = set()
+    for part in parts:
+        for mm in re.finditer(r'(?:では|にて)\s*(?:平時にも|恒常ドロップ)', part):
+            head = part[:mm.start()]
+            cut = max(head.rfind('。'), head.rfind('※'), head.rfind('模様'))
+            for mp, node in areas(head[cut + 1:][-200:]):
+                if node:
+                    normal.add((mp, node))
+    cont = None
+    if '一部' in status:
+        for mm in re.finditer(r'以降も\s*([0-9A-Z\-、,\s]+?|\d-\d\s*ボス)\s*における', txt):
+            cont = cont or set()
+            seg = mm.group(1)
+            for b in BOSS.finditer(seg):
+                cont.add((b.group(1), 'ボス'))
+            for mp, node in areas(BOSS.sub('', seg)):
+                cont.add((mp, node))
+    return {"normal": normal, "cont": cont}
+
+
+def ended_after(h2, n):
+    """見出しの中で、艦名のリンクのすぐ後に「（終了）」があるか。"""
+    for a in h2.find_all('a'):
+        if names.get(norm_name(a.get_text(' ', strip=True))) != n: continue
+        nxt = a.next_sibling
+        txt = ''
+        while nxt is not None and len(txt) < 8:
+            txt += nxt.get_text() if hasattr(nxt, 'get_text') else str(nxt)
+            nxt = nxt.next_sibling
+        if re.match(r'\s*[（(]\s*終了', txt):
+            return True
+    return False
+
+
 DATE = re.compile(r'(\d{4})/(\d{1,2})/(\d{1,2})')
 
 
@@ -83,6 +165,7 @@ def parse_file(path, events, entries, ongoing, html=None):
     title_tag = s.title.get_text() if s.title else ''
     archive = 'アーカイブ' in title_tag or '終了済' in title_tag
     n_ev = 0
+    normal_out = NORMAL
     HEAD = re.compile(r'^(.*?)\s*[\(（]\s*(\d{4})/(\d{1,2})/(\d{1,2})\s*[～~〜]\s*([^)）]*)[\)）]?')
     for h2 in s.find_all('h2'):
         title = h2.get_text(' ', strip=True)
@@ -98,22 +181,53 @@ def parse_file(path, events, entries, ongoing, html=None):
         status = '終了' if (archive or (end and '継続' not in rest)) else rest
         events.append({"title": name, "start": start, "end": end, "status": status})
         n_ev += 1
+        # 見出しで「（終了）」が付いている艦、「○○ のみ継続中」の艦
+        title_ships = [n for n, _ in ships_in(h2)]
+        t_ended = {n for n in title_ships if ended_after(h2, n)}
+        only = None
+        mo = re.search(r'(.+?)\s*のみ継続中', rest)
+        if mo:
+            only = {names.get(norm_name(x.strip())) for x in re.split(r'[、,]', mo.group(1))} - {None}
+
+        def is_ended(n, mark=False):
+            return int(bool(mark) or status == '終了' or n in t_ended or (only is not None and n not in only))
+
+        sec = section_notes(h2, status)
+        for mp, node in sec["normal"]:
+            for n in title_ships:
+                normal_out.append([mp, node, n])
         # 次の h2 までの表
         for el in h2.find_all_next(['h2', 'table']):
             if el.name == 'h2': break
             rows = grid(el)
             if not rows: continue
             hdr = [c.get_text(strip=True) for c in rows[0]]
-            if 'ドロップ対象' not in hdr or 'エリア' not in hdr: continue
-            ia, iship = hdr.index('エリア'), hdr.index('ドロップ対象')
-            for r in rows[1:]:
-                if len(r) <= max(ia, iship): continue
-                ar = areas(r[ia].get_text(' ', strip=True))
-                sh = ships_in(r[iship])
-                if not ar or not sh: continue
-                for mp, node in ar:
-                    for n, ended in sh:
-                        entries.append([mp, node, n, ei, int(ended or status == '終了')])
+            if 'ドロップ対象' in hdr and 'エリア' in hdr:
+                # 新しい形式: 海域 | エリア | ドロップ対象
+                ia, iship = hdr.index('エリア'), hdr.index('ドロップ対象')
+                for r in rows[1:]:
+                    if len(r) <= max(ia, iship): continue
+                    ar = areas(r[ia].get_text(' ', strip=True))
+                    sh = ships_in(r[iship])
+                    if not ar or not sh: continue
+                    for mp, node in ar:
+                        for n, ended in sh:
+                            entries.append([mp, node, n, ei, is_ended(n, ended)])
+            elif len(hdr) == 2 and hdr[0] == '海域' and hdr[1] in ('ドロップエリア', 'エリア'):
+                # 古い形式: 「○○ のドロップが確認されたポイント」の下に 海域 | ドロップエリア の表。
+                # 艦はその表の前 (前の表より後) の文から、書かれていなければ見出しから取る
+                li = el.find_parent('li')
+                sh = (old_groups(li).get(id(el)) if li is not None else None) or [(n, False) for n in title_ships]
+                for r in rows[1:]:
+                    if len(r) < 2: continue
+                    for mp, node, grey in cell_areas(r[1]):
+                        if (mp, node) in sec["normal"]: continue
+                        for n, gone in sh:
+                            e = is_ended(n, gone or grey)
+                            if not e and sec["cont"] is not None and (mp, node) not in sec["cont"] \
+                                    and (mp, None) not in sec["cont"]:
+                                e = 1      # 「○○以降も 1-6-B、1-6-J における卯月ドロップは継続」: ほかのマスは終了
+                            entries.append([mp, node, n, ei, e])
 
     # 先頭の「現在継続中」一覧 (海域単位)
     found = {}
@@ -135,10 +249,14 @@ def parse_file(path, events, entries, ongoing, html=None):
     return {"archive": archive, "events": n_ev, "ongoing": len(found)}
 
 
+NORMAL = []     # 「○○では平時にもドロップする」と書かれたマス [[海域, マス, 艦]]
+
+
 def build_page(sources):
     """sources: [(名前, HTML 文字列 または None=ファイルを読む)] から limited_page.json の中身を作る。
     戻り値: (page, info)  info = 各ファイルの読み取り結果"""
     events, entries, ongoing, info = [], [], {}, []
+    NORMAL.clear()
     for path, html in sources:
         info.append(parse_file(path, events, entries, ongoing, html))
     add_extra(events, entries)
@@ -146,7 +264,8 @@ def build_page(sources):
     path = os.path.join(ROOT, 'data', 'limited_page.json')
     page = json.load(open(path, encoding='utf-8')) if os.path.exists(path) else {}
     page.update({"source": "艦これ攻略Wiki 期間限定ドロップイベント / 終了済アーカイブ",
-                 "events": events, "entries": entries})
+                 "events": events, "entries": entries,
+                 "normal": [list(x) for x in dict.fromkeys(tuple(e) for e in NORMAL)]})
     if ongoing:
         page["ongoing"] = {k: sorted(set(v)) for k, v in ongoing.items()}
     return page, info
