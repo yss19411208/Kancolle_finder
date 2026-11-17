@@ -575,6 +575,40 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 .fleet-table .en-eq { color: var(--text-sub); font-size: 11px; white-space: normal; text-align: left; }
 .fleet-sub { padding: 3px 10px; font-size: 11px; color: var(--text-sub); background: #fafcfc; border-bottom: 1px solid #eef2f3; }
 .fleet-wrap { overflow-x: auto; }
+.enemy-pick { padding: 8px 14px 0; font-size: 12px; color: var(--text-sub); }
+.enemy-pick select { font: inherit; font-size: 13px; padding: 2px 4px; margin-left: 4px; max-width: 60vw; }
+.drop-sum { border: 2px solid var(--brass); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; background: #fffaf0; }
+.drop-sum-title { font-weight: 700; color: #6b4a00; margin-bottom: 6px; font-size: 14px; }
+.drop-sum-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.drop-sum-table th { text-align: left; color: var(--text-sub); font-weight: 600; padding: 3px 5px; border-bottom: 1px solid #ecdcb4; white-space: nowrap; }
+.drop-sum-table td { padding: 5px; border-bottom: 1px solid #f3e8cc; vertical-align: middle; }
+.drop-sum-table tr { cursor: pointer; }
+.drop-sum-table tr:hover td { background: #fff3d6; }
+.drop-sum-table td.star, .drop-star { color: #c08a00; font-weight: 700; }
+.drop-sum-table .sub { color: var(--text-sub); font-size: 11px; margin-left: 2px; white-space: nowrap; }
+.drop-sum-table td:first-child + td { display: flex; flex-wrap: wrap; gap: 3px; }
+.enemy-section { font-weight: 700; color: var(--navy); margin: 4px 0 8px; font-size: 13px; }
+.fleet.dropped { border: 2px solid var(--brass); }
+.fleet.dropped .fleet-head { background: #fff6df; }
+.drop-star { font-size: 13px; }
+.fleet-drop { flex-basis: 100%; font-size: 12px; color: #6b4a00; font-weight: 600; margin-top: 3px; }
+.fleet-drop.none { color: var(--text-sub); font-weight: 400; }
+.fleet-line { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.en-chip { background: #fff; border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-size: 12px; white-space: nowrap; }
+.en-chip.flag { border-color: var(--navy2); font-weight: 700; }
+.en-chip .en-rank { font-size: 10px; font-weight: 700; margin-left: 2px; }
+.en-chip .en-rank.elite { color: #b8371c; }
+.en-chip .en-rank.flagship { color: #a07a00; }
+.fleet-sep { font-size: 11px; color: var(--text-sub); align-self: center; margin: 0 2px 0 6px; }
+.en-no { display: inline-block; min-width: 1.4em; color: var(--text-sub); font-size: 11px; }
+.fleet-table tr.en-row td { border-bottom: none; padding-bottom: 1px; }
+.fleet-table tr.en-eqrow td { text-align: left; color: var(--text-sub); font-size: 11px; white-space: normal; padding: 0 6px 5px 26px; }
+@media (max-width: 560px) {
+  .fleet-table { font-size: 11px; }
+  .fleet-table th, .fleet-table td { padding: 3px 3px; }
+  .fleet-table .en-type { display: none; }
+  .fleet-table tr.en-eqrow td { padding-left: 20px; }
+}
 .node-body { border-top: 1px solid var(--border); padding: 4px 0 8px; }
 
 /* 艦のタイル: 艦種ごとに横へ並べる */
@@ -776,6 +810,7 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
       <span id="enemyTitle">敵編成</span>
       <button class="modal-close" style="margin-left:auto" onclick="closeEnemy()">閉じる</button>
     </div>
+    <div class="enemy-pick"><label>ドロップした編成に ★ を付ける艦: <select id="enemyShip" onchange="enemyShip = this.value; renderEnemy(enemyAt[0], enemyAt[1])"></select></label></div>
     <div class="enemy-body" id="enemyBody"></div>
   </div>
 </div>
@@ -1266,7 +1301,7 @@ function renderDrop(ship) {
     for (const x of md) {
       const boss = nodeMeta[map]?.[x.node]?.boss ? '<span class="badge boss">ボス</span>' : '';
       const lim  = x.limited ? '<span class="badge limited">限定</span>' : '';
-      html += `<tr><td>${nodeMark(map, x.node)}${boss}${lim}<button class="enemy-btn" onclick="openEnemy('${map}','${x.node}')">敵編成</button></td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
+      html += `<tr><td>${nodeMark(map, x.node)}${boss}${lim}<button class="enemy-btn" onclick="openEnemy('${map}','${x.node}','${esc(ship)}')">敵編成</button></td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
     }
     html += '</table>';
     html += mediaHtml(map, 'sm');
@@ -1360,7 +1395,14 @@ function onModalBg(e)  { if (e.target===$('shipModal')) closeModal(); }
 // ============================================================
 //  敵編成 (data/enemy.json、初めて開いたときに読み込む)
 // ============================================================
-let enemyData = null, enemyLoading = null;
+let enemyData = null, enemyLoading = null, enemyShip = '', enemyAt = ['', ''];
+const enemyDrops = {};      // 海域 -> data/enemy_drop/海域.json (編成ごとに出た艦)
+function loadEnemyDrops(map) {
+  if (!enemyDrops[map]) enemyDrops[map] = fetch(`data/enemy_drop/${map}.json`, { cache: 'no-cache' })
+    .then(r => r.ok ? r.json() : {}).catch(() => ({}));
+  return enemyDrops[map];
+}
+const pctE = (a, b) => b ? (a / b * 100 >= 10 ? (a / b * 100).toFixed(1) : (a / b * 100).toFixed(2)) + '%' : '—';
 function loadEnemy() {
   if (!enemyLoading) enemyLoading = fetch('data/enemy.json', { cache: 'no-cache' })
     .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
@@ -1372,22 +1414,33 @@ function htmlEsc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;',
 const RNG = { 1: '短', 2: '中', 3: '長', 4: '超長', 5: '超長+' };
 const SPD = { 0: '陸上', 5: '低速', 10: '高速', 15: '高速+', 20: '最速' };
 function enemyRows(ids, D) {
-  return ids.map(id => {
+  return ids.map((id, i) => {
     const e = D.ships[id] || { n: '#' + id };
     const y = e.y ? `<span class="en-rank ${htmlEsc(e.y)}">${htmlEsc(e.y)}</span>` : '';
     const v = k => e[k] == null ? '—' : e[k];
-    return `<tr><td><span class="en-name">${htmlEsc(e.n)}${y}</span><span class="en-type">${htmlEsc(e.t || '')}</span></td>`
+    return `<tr class="en-row"><td><span class="en-no">${i + 1}</span><span class="en-name">${htmlEsc(e.n)}${y}</span><span class="en-type">${htmlEsc(e.t || '')}</span></td>`
       + `<td>${v('hp')}</td><td>${v('ar')}</td><td>${v('fp')}</td><td>${v('tp')}</td><td>${v('aa')}</td><td>${v('asw')}</td>`
-      + `<td>${RNG[e.rng] || '—'}</td><td class="en-eq">${htmlEsc((e.eq || []).join('、'))}</td></tr>`;
+      + `<td>${RNG[e.rng] || '—'}</td></tr>`
+      + (e.eq && e.eq.length ? `<tr class="en-eqrow"><td colspan="8">装備: ${htmlEsc(e.eq.join('、'))}</td></tr>` : '');
+  }).join('');
+}
+// 編成の並び (旗艦から順に全艦)
+function lineup(ids, D) {
+  return ids.map((id, i) => {
+    const e = D.ships[id] || { n: '#' + id };
+    return `<span class="en-chip${i === 0 ? ' flag' : ''}">${htmlEsc(e.n)}${e.y ? `<span class="en-rank ${htmlEsc(e.y)}">${htmlEsc(e.y)}</span>` : ''}</span>`;
   }).join('');
 }
 function fleetTable(ids, D, label) {
   return (label ? `<div class="fleet-sub">${label}</div>` : '')
-    + '<div class="fleet-wrap"><table class="fleet-table"><thead><tr><th>敵艦</th><th>耐久</th><th>装甲</th><th>火力</th><th>雷装</th><th>対空</th><th>対潜</th><th>射程</th><th>装備</th></tr></thead>'
+    + '<div class="fleet-wrap"><table class="fleet-table"><thead><tr><th>敵艦</th><th>耐久</th><th>装甲</th><th>火力</th><th>雷装</th><th>対空</th><th>対潜</th><th>射程</th></tr></thead>'
     + `<tbody>${enemyRows(ids, D)}</tbody></table></div>`;
 }
 function renderEnemy(map, node) {
   const D = enemyData, v = D?.maps?.[map]?.[node];
+  loadEnemyDrops(map).then(dd => renderEnemyWith(map, node, D, v, (dd || {})[node] || []));
+}
+function renderEnemyWith(map, node, D, v, fdrops) {
   const boss = nodeMeta[map]?.[node]?.boss;
   $('enemyTitle').textContent = `${map} ${node} マス${boss ? '（ボス）' : ''}の敵編成`;
   if (!v) { $('enemyBody').innerHTML = '<div class="no-data">このマスの敵編成の記録はまだありません</div>'; return; }
@@ -1395,17 +1448,56 @@ function renderEnemy(map, node) {
   const mo = v.months.map(m => m.replace('-', '年') + '月').join('・');
   let h = `<p class="enemy-note">${mo}にこのマスで勝った記録 ${v.n.toLocaleString()} 件から、出た割合の多い順に並べています（0.5% 未満のものは省略）。`
     + `敵艦の性能は KC3改のデータです。</p>`;
-  for (const f of v.fleets) {
+  const sh = enemyShip;
+  const got = i => (fdrops[i] || {})[sh] || [0, 0];
+  if (sh) {
+    // 選んだ艦がドロップした編成のまとめ
+    const idx = v.fleets.map((f, i) => i).filter(i => got(i)[0] + got(i)[1] > 0);
+    const tS = v.fleets.reduce((a, f, i) => a + got(i)[0], 0), tO = v.fleets.reduce((a, f, i) => a + got(i)[1], 0);
+    h += `<div class="drop-sum"><div class="drop-sum-title">★ ${htmlEsc(sh)} がドロップした編成：${idx.length} / ${v.fleets.length} 編成`
+      + `（この期間に S 勝利 ${tS} 件・A/B 勝利 ${tO} 件）</div>`;
+    if (idx.length) {
+      h += '<table class="drop-sum-table"><thead><tr><th></th><th>編成</th><th>出た割合</th><th>S 勝利でのドロップ率</th><th>A/B 勝利でのドロップ率</th></tr></thead><tbody>';
+      for (const i of idx.sort((a, b) => (got(b)[0] + got(b)[1]) - (got(a)[0] + got(a)[1]))) {
+        const f = v.fleets[i], [a, b] = got(i);
+        h += `<tr onclick="document.getElementById('fleet_${i}').scrollIntoView({behavior:'smooth',block:'start'})">`
+          + `<td class="star">★</td><td>${lineup(f.s, D)}${f.s2 && f.s2.length ? `<span class="fleet-sep">随伴</span>${lineup(f.s2, D)}` : ''}</td>`
+          + `<td>${f.r}%</td><td><b>${pctE(a, f.b?.[0])}</b><span class="sub">（${a} / ${(f.b?.[0] || 0).toLocaleString()}）</span></td>`
+          + `<td><b>${pctE(b, f.b?.[1])}</b><span class="sub">（${b} / ${(f.b?.[1] || 0).toLocaleString()}）</span></td></tr>`;
+      }
+      h += '</tbody></table>';
+    } else {
+      h += '<div class="enemy-note">この期間の記録では、どの編成でもまだ出ていません。</div>';
+    }
+    h += '<div class="enemy-note">ドロップ率は、その編成と戦って S 勝利（または A/B 勝利）した回数のうち、この艦が出た割合です（上の期間の分。公開している率とは期間が違うことがあります）。</div></div>'
+      + '<div class="enemy-section">このマスの編成（すべて）</div>';
+  }
+  v.fleets.forEach((f, i) => {
     const fm = f.fm.map(([k, r]) => `${FM[k] || '陣形' + k}${f.fm.length > 1 ? ` ${r}%` : ''}`).join('・');
-    h += `<div class="fleet"><div class="fleet-head"><span class="fleet-share">${f.r}%</span>`
+    const [a, b] = got(i), hit = sh && a + b > 0;
+    h += `<div class="fleet${hit ? ' dropped' : ''}" id="fleet_${i}"><div class="fleet-head">`
+      + (hit ? '<span class="drop-star">★ ドロップした編成</span>' : '')
+      + `<span class="fleet-share">${f.r}%</span>`
       + `<span class="fleet-name">${htmlEsc(f.nm || '敵艦隊')}</span>`
-      + `<span class="fleet-meta">${fm || '陣形不明'}${f.exp ? `・基本経験値 ${f.exp}` : ''}・${f.k.toLocaleString()} 件</span></div>`
+      + `<span class="fleet-meta">${fm || '陣形不明'}${f.exp ? `・基本経験値 ${f.exp}` : ''}・${f.k.toLocaleString()} 件</span>`
+      + `<div class="fleet-line">${lineup(f.s, D)}${f.s2 && f.s2.length ? `<span class="fleet-sep">随伴</span>${lineup(f.s2, D)}` : ''}</div>`
+      + (sh ? `<div class="fleet-drop${hit ? '' : ' none'}">${hit
+          ? `${htmlEsc(sh)}：S 勝利 ${pctE(a, f.b?.[0])}（${a} / ${(f.b?.[0] || 0).toLocaleString()}）・A/B 勝利 ${pctE(b, f.b?.[1])}（${b} / ${(f.b?.[1] || 0).toLocaleString()}）`
+          : `${htmlEsc(sh)} はこの編成ではまだ出ていない（S 勝利 ${(f.b?.[0] || 0).toLocaleString()} 戦・A/B 勝利 ${(f.b?.[1] || 0).toLocaleString()} 戦）`}</div>` : '')
+      + '</div>'
       + (f.s2 && f.s2.length ? fleetTable(f.s, D, '主力艦隊') + fleetTable(f.s2, D, '随伴艦隊') : fleetTable(f.s, D, ''))
       + '</div>';
-  }
+  });
   $('enemyBody').innerHTML = h;
 }
-function openEnemy(map, node) {
+function openEnemy(map, node, ship) {
+  enemyAt = [map, node];
+  // ★ を付ける艦: 艦の詳細から開いたらその艦、海域から開いたら選んでもらう
+  const here = (mapData[map]?.[node] || []).map(e => e.ship);
+  enemyShip = ship && here.includes(ship) ? ship : (ship || '');
+  $('enemyShip').innerHTML = '<option value="">（選ばない）</option>'
+    + [...new Set([enemyShip, ...here].filter(Boolean))].map(n => `<option${n === enemyShip ? ' selected' : ''}>${htmlEsc(n)}</option>`).join('');
+  loadEnemyDrops(map);
   $('enemyTitle').textContent = `${map} ${node} マスの敵編成`;
   $('enemyBody').innerHTML = '<div class="no-data">読み込み中…</div>';
   $('enemyModal').classList.add('open');
