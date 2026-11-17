@@ -1134,7 +1134,7 @@ def reason_text(pub, why, cls, j, nt, sus, since_drops, since_battles, cutoff, n
             return f"手動で「限定にする」にしている。最新のアップデート（{cut}）以降に {since_drops} 件"
         return f"限定ページで継続中。最新のアップデート（{cut}）以降に {since_drops} 件出ている"
     if pub == "1隻報告":
-        return (f"最新のアップデート（{cut}）以降の報告が 1 件だけで、その間にこのマスの戦闘が "
+        return (f"最新のアップデート（{cut}）以降の報告が 1 件だけで、その間にこのマスでその艦が出るランクの勝利が "
                 f"{since_battles:,} 回ある（{SINGLE_MIN_BATTLES:,} 回以上で 1 件だけのものは載せない）")
     if pub == "除外":
         return "除外リストに入れている"
@@ -1477,6 +1477,17 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
             page = ("ongoing" if (k3 in on_node or (m, nn) in on_map or kb in on_node)
                     else "ended" if (k3 in ended or (m, None, nn) in ended or kb in ended) else "")
             lim_wait = False
+
+            def rank_battles(sid_, a, b):
+                # 最近 (90 日) どのランクで出ているか。記録が無ければ判定期間すべてで見る
+                _, _, hs, ho = seg_sum(m, node, sid_, now - 90 * DAY)
+                if not hs + ho:
+                    hs, ho = dS.get(sid_, 0), dO.get(sid_, 0)
+                if hs and not ho:
+                    return a
+                if ho and not hs:
+                    return b
+                return a + b
             # 艦ろぐ: この艦の数と「期間限定」の印
             use_kl = bool(kln) and k3 not in kl_ex
             kl_lab = (kln["lim"].get(str(sid), "") if kln else "")
@@ -1555,8 +1566,11 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
                     if not ds + do:
                         ds, do = kls[0], kls[1]
                         ns, no = kls[2], kls[3]
-                if ds + do == 1 and ns + no >= SINGLE_MIN_BATTLES and k3 not in keep:
-                    single.append([m, node, nm, ns + no])
+                # 「1 件だけ」の判定に使う戦闘数は、その艦が出るランクの分だけ
+                # (2-5-O の秋雲のように A/B 勝利でしか出ない艦なら、A/B 勝利の数だけ)
+                sb = rank_battles(sid, ns, no)
+                if ds + do == 1 and sb >= SINGLE_MIN_BATTLES and k3 not in keep:
+                    single.append([m, node, nm, sb])
                     pub = "1隻報告"
                 else:
                     r, d, n, basis = rate(ds, do, ns, no, m, map_den_since[m] + (
@@ -1586,7 +1600,8 @@ def build_drop_data(states, cfg, ships, now, wiki=None, kanlog=None):
                     nt["lim"] = (nt.get("lim", "") + " / " if nt.get("lim") else "") + \
                         f"艦ろぐでは「期間限定 {kl_lab}」（" + ("Wiki の限定ページに、このマスでは平時にも出ると書かれているため常設）"
                                                           if k3 in WIKI_NORMAL else "艦ろぐを使わない設定のため常設）")
-                reason = reason_text(pub, why, cls, j, nt, sus, ds + do, ns_poi + no_poi + kls[2] + kls[3],
+                reason = reason_text(pub, why, cls, j, nt, sus, ds + do,
+                                     rank_battles(sid, ns_poi + kls[2], no_poi + kls[3]),
                                      cutoff, nS + nO, kl_lab)
                 if lim_wait:
                     reason = (("限定ページで継続中" if why == "page" else f"艦ろぐで「期間限定 {kl_lab}」" if why == "kanlog" else "限定")
