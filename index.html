@@ -536,6 +536,45 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 .node-label + .node-count { margin-left: auto; }
 .node-count.lim { background: var(--limited-bg); color: var(--limited); font-weight: 700; }
 .node-toggle { margin-left: 6px; }
+
+/* ---- 敵編成 ---- */
+.enemy-btn {
+  border: 1px solid var(--border); background: #fff; color: var(--navy); border-radius: 4px;
+  font: inherit; font-size: 12px; padding: 2px 8px; cursor: pointer; white-space: nowrap;
+}
+.enemy-btn:hover { background: var(--blue-light); }
+.node-header .enemy-btn { margin-left: 8px; }
+.rate-table .enemy-btn { margin-left: 6px; vertical-align: middle; }
+#enemyModal {
+  display: none; position: fixed; inset: 0; z-index: 250;
+  background: rgba(10,20,40,.55); align-items: flex-start; justify-content: center;
+  padding: 36px 12px 20px; overflow-y: auto;
+}
+#enemyModal.open { display: flex; }
+#enemyModal .modal-box { max-width: 760px; }
+.enemy-body { padding: 10px 14px 16px; max-height: 80vh; overflow-y: auto; }
+.enemy-note { font-size: 12px; color: var(--text-sub); margin: 2px 0 10px; line-height: 1.6; }
+.fleet { border: 1px solid var(--border); border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
+.fleet-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 7px 10px;
+  background: #f4f8f9; border-bottom: 1px solid var(--border); font-size: 13px;
+}
+.fleet-share { font-weight: 700; color: var(--navy); font-size: 15px; font-variant-numeric: tabular-nums; }
+.fleet-name { font-weight: 600; }
+.fleet-meta { color: var(--text-sub); font-size: 12px; }
+.fleet-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.fleet-table th { text-align: right; font-weight: 600; color: var(--text-sub); padding: 4px 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+.fleet-table th:first-child, .fleet-table td:first-child, .fleet-table th:last-child { text-align: left; }
+.fleet-table td { text-align: right; padding: 4px 6px; border-bottom: 1px solid #eef2f3; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.fleet-table tr:last-child td { border-bottom: none; }
+.fleet-table .en-name { font-weight: 600; white-space: normal; }
+.fleet-table .en-rank { font-size: 11px; font-weight: 700; margin-left: 3px; }
+.fleet-table .en-rank.elite { color: #b8371c; }
+.fleet-table .en-rank.flagship { color: #a07a00; }
+.fleet-table .en-type { color: var(--text-sub); font-size: 11px; margin-left: 4px; }
+.fleet-table .en-eq { color: var(--text-sub); font-size: 11px; white-space: normal; text-align: left; }
+.fleet-sub { padding: 3px 10px; font-size: 11px; color: var(--text-sub); background: #fafcfc; border-bottom: 1px solid #eef2f3; }
+.fleet-wrap { overflow-x: auto; }
 .node-body { border-top: 1px solid var(--border); padding: 4px 0 8px; }
 
 /* 艦のタイル: 艦種ごとに横へ並べる */
@@ -731,6 +770,16 @@ button:focus-visible, .chip:focus-visible, .tab:focus-visible, .ship-row:focus-v
 </div>
 
 <!-- 攻略ページ -->
+<div id="enemyModal" onclick="if (event.target === this) closeEnemy()">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span id="enemyTitle">敵編成</span>
+      <button class="modal-close" style="margin-left:auto" onclick="closeEnemy()">閉じる</button>
+    </div>
+    <div class="enemy-body" id="enemyBody"></div>
+  </div>
+</div>
+
 <div id="kouryakuModal" onclick="onKouryakuBg(event)">
   <div class="kouryaku-box">
     <div class="kouryaku-bar">
@@ -1046,6 +1095,7 @@ function showMap() {
       + `<span class="node-label">${boss ? 'ボスマス' : 'マス'}</span>`
       + `<span class="node-count">${entries.length}艦</span>`
       + (limCnt ? `<span class="node-count lim">限定 ${limCnt}</span>` : '')
+      + `<button class="enemy-btn" onclick="event.stopPropagation(); openEnemy('${map}','${node}')">敵編成</button>`
       + `<span class="node-toggle" id="tog_${nodeId}">${open ? '▼' : '▶'}</span></div>`;
     html += `<div class="node-body${open ? ' open' : ''}" id="${nodeId}">`;
     for (let ti = 0; ti < TYPE_LABELS.length; ti++) {
@@ -1216,7 +1266,7 @@ function renderDrop(ship) {
     for (const x of md) {
       const boss = nodeMeta[map]?.[x.node]?.boss ? '<span class="badge boss">ボス</span>' : '';
       const lim  = x.limited ? '<span class="badge limited">限定</span>' : '';
-      html += `<tr><td>${nodeMark(map, x.node)}${boss}${lim}</td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
+      html += `<tr><td>${nodeMark(map, x.node)}${boss}${lim}<button class="enemy-btn" onclick="openEnemy('${map}','${x.node}')">敵編成</button></td><td class="r">${rateText(x) || '—'}</td><td class="n">${rateTitle(x)}</td></tr>`;
     }
     html += '</table>';
     html += mediaHtml(map, 'sm');
@@ -1307,6 +1357,67 @@ function onModalBg(e)  { if (e.target===$('shipModal')) closeModal(); }
 // ============================================================
 //  画像・攻略・ドロワー
 // ============================================================
+// ============================================================
+//  敵編成 (data/enemy.json、初めて開いたときに読み込む)
+// ============================================================
+let enemyData = null, enemyLoading = null;
+function loadEnemy() {
+  if (!enemyLoading) enemyLoading = fetch('data/enemy.json', { cache: 'no-cache' })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(d => (enemyData = d))
+    .catch(e => { enemyLoading = null; throw e; });
+  return enemyLoading;
+}
+function htmlEsc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+const RNG = { 1: '短', 2: '中', 3: '長', 4: '超長', 5: '超長+' };
+const SPD = { 0: '陸上', 5: '低速', 10: '高速', 15: '高速+', 20: '最速' };
+function enemyRows(ids, D) {
+  return ids.map(id => {
+    const e = D.ships[id] || { n: '#' + id };
+    const y = e.y ? `<span class="en-rank ${htmlEsc(e.y)}">${htmlEsc(e.y)}</span>` : '';
+    const v = k => e[k] == null ? '—' : e[k];
+    return `<tr><td><span class="en-name">${htmlEsc(e.n)}${y}</span><span class="en-type">${htmlEsc(e.t || '')}</span></td>`
+      + `<td>${v('hp')}</td><td>${v('ar')}</td><td>${v('fp')}</td><td>${v('tp')}</td><td>${v('aa')}</td><td>${v('asw')}</td>`
+      + `<td>${RNG[e.rng] || '—'}</td><td class="en-eq">${htmlEsc((e.eq || []).join('、'))}</td></tr>`;
+  }).join('');
+}
+function fleetTable(ids, D, label) {
+  return (label ? `<div class="fleet-sub">${label}</div>` : '')
+    + '<div class="fleet-wrap"><table class="fleet-table"><thead><tr><th>敵艦</th><th>耐久</th><th>装甲</th><th>火力</th><th>雷装</th><th>対空</th><th>対潜</th><th>射程</th><th>装備</th></tr></thead>'
+    + `<tbody>${enemyRows(ids, D)}</tbody></table></div>`;
+}
+function renderEnemy(map, node) {
+  const D = enemyData, v = D?.maps?.[map]?.[node];
+  const boss = nodeMeta[map]?.[node]?.boss;
+  $('enemyTitle').textContent = `${map} ${node} マス${boss ? '（ボス）' : ''}の敵編成`;
+  if (!v) { $('enemyBody').innerHTML = '<div class="no-data">このマスの敵編成の記録はまだありません</div>'; return; }
+  const FM = D.formations || {};
+  const mo = v.months.map(m => m.replace('-', '年') + '月').join('・');
+  let h = `<p class="enemy-note">${mo}にこのマスで勝った記録 ${v.n.toLocaleString()} 件から、出た割合の多い順に並べています（0.5% 未満のものは省略）。`
+    + `敵艦の性能は KC3改のデータです。</p>`;
+  for (const f of v.fleets) {
+    const fm = f.fm.map(([k, r]) => `${FM[k] || '陣形' + k}${f.fm.length > 1 ? ` ${r}%` : ''}`).join('・');
+    h += `<div class="fleet"><div class="fleet-head"><span class="fleet-share">${f.r}%</span>`
+      + `<span class="fleet-name">${htmlEsc(f.nm || '敵艦隊')}</span>`
+      + `<span class="fleet-meta">${fm || '陣形不明'}${f.exp ? `・基本経験値 ${f.exp}` : ''}・${f.k.toLocaleString()} 件</span></div>`
+      + (f.s2 && f.s2.length ? fleetTable(f.s, D, '主力艦隊') + fleetTable(f.s2, D, '随伴艦隊') : fleetTable(f.s, D, ''))
+      + '</div>';
+  }
+  $('enemyBody').innerHTML = h;
+}
+function openEnemy(map, node) {
+  $('enemyTitle').textContent = `${map} ${node} マスの敵編成`;
+  $('enemyBody').innerHTML = '<div class="no-data">読み込み中…</div>';
+  $('enemyModal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  loadEnemy().then(() => renderEnemy(map, node))
+    .catch(() => { $('enemyBody').innerHTML = '<div class="no-data">敵編成のデータを読み込めませんでした</div>'; });
+}
+function closeEnemy() {
+  $('enemyModal').classList.remove('open');
+  if (!$('shipModal').classList.contains('open')) document.body.style.overflow = '';
+}
+
 function openImgModal(src) { $('imgModalImg').src=src; $('imgModal').classList.add('open'); }
 function closeImgModal()   { $('imgModal').classList.remove('open'); }
 

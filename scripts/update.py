@@ -59,12 +59,20 @@ SOURCES = [
     {"name": "api_start2 (Tibowl)", "url": "https://github.com/Tibowl/api_start2", "use": "艦ID→艦名・艦種・レア度 (api_backs)"},
     {"name": "poi 海域データ (fcd/map.json)", "url": "https://github.com/poooi/poi", "use": "セルID→マス名"},
     {"name": "KC3改 edges.json", "url": "https://github.com/KC3Kai/KC3Kai", "use": "セルID→マス名の補完"},
+    {"name": "KC3改 abyssal_stats.json", "url": "https://github.com/KC3Kai/KC3Kai", "use": "敵艦の耐久・装甲・火力などと装備"},
 ]
 START2_URLS = [
     "https://raw.githubusercontent.com/Tibowl/api_start2/master/start2.json",
 ]
 POI_MAP_URL = "https://raw.githubusercontent.com/poooi/poi/master/assets/data/fcd/map.json"
 KC3_EDGES_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/edges.json"
+KC3_ABYSSAL_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/abyssal_stats.json"
+# 敵編成: 1 か月・1 マスあたり、保存する編成の数と、表示する編成の割合の下限
+COMP_KEEP = 20
+COMP_MIN_SHARE = 0.005
+COMP_MIN_RECORDS = 300   # 当月の記録がこれより少ないマスは、前の月の分も合わせて出す
+FORMATIONS = {1: "単縦陣", 2: "複縦陣", 3: "輪形陣", 4: "梯形陣", 5: "単横陣", 6: "警戒陣",
+              11: "第一警戒航行序列", 12: "第二警戒航行序列", 13: "第三警戒航行序列", 14: "第四警戒航行序列"}
 
 TYPE_LABELS = ["戦艦級", "航空母艦", "重巡級", "軽巡級", "駆逐艦", "海防艦", "潜水艦", "補助艦艇"]
 # api_stype -> 8 分類の添字 (艦これWikiの出撃ドロップ表と同じ並び)
@@ -189,6 +197,37 @@ def norm_name(s):
     return "".join(str(s).split()).replace("　", "").lower()
 
 
+def refresh_enemy_master(s2):
+    """深海棲艦の名前・艦種 (api_start2) と、耐久・装甲・火力など (KC3改) を data/enemy_master.json に保存する。
+    {艦ID: {"n": 名前, "y": elite/flagship, "t": 艦種名, "hp", "ar", "fp", "tp", "aa", "ev", "asw", "los", "luck",
+            "spd", "rng", "eq": [装備名]}}"""
+    path = os.path.join(ROOT, "data", "enemy_master.json")
+    stype = {x["api_id"]: x["api_name"] for x in s2.get("api_mst_stype", [])}
+    items = {x["api_id"]: x["api_name"] for x in s2.get("api_mst_slotitem", [])}
+    try:
+        aby = json.loads(http_get(KC3_ABYSSAL_URL, timeout=60))
+    except Exception as e:  # noqa: BLE001
+        warn(f"敵艦の性能 (KC3改) を取得できず、名前だけにします: {e}")
+        aby = {}
+    out = {}
+    for x in s2.get("api_mst_ship", []):
+        if x["api_id"] <= 1500 or not x.get("api_name"):
+            continue
+        e = {"n": x["api_name"], "y": x.get("api_yomi") if x.get("api_yomi") not in ("", "-") else "",
+             "t": stype.get(x.get("api_stype"), "")}
+        a = aby.get(str(x["api_id"])) or {}
+        for k, src in (("hp", "api_taik"), ("ar", "api_souk"), ("fp", "api_houg"), ("tp", "api_raig"),
+                       ("aa", "api_tyku"), ("ev", "kc3_evas"), ("asw", "kc3_asw"), ("los", "kc3_los"),
+                       ("luck", "api_luck"), ("spd", "api_soku"), ("rng", "api_leng")):
+            if isinstance(a.get(src), (int, float)):
+                e[k] = a[src]
+        if a.get("kc3_slots"):
+            e["eq"] = [items.get(i, f"#{i}") for i in a["kc3_slots"] if i and i > 0]
+        out[str(x["api_id"])] = e
+    if len(out) > 300 and out != load_json(path, {}):
+        save_json(path, out, compact=True)
+
+
 def refresh_masters(offline=False):
     """艦ID->艦名、海域のセルID->マス名 を取得。失敗時はリポジトリ内のキャッシュを使う。"""
     ship_path = os.path.join(ROOT, "data", "ship_master.json")
@@ -213,6 +252,7 @@ def refresh_masters(offline=False):
                     if new != ships:
                         save_json(ship_path, new, compact=True)
                     ships = new
+                    refresh_enemy_master(s2)
                     break
             except Exception as e:  # noqa: BLE001
                 warn(f"艦マスターの更新に失敗 (キャッシュを使用): {e}")
@@ -348,6 +388,7 @@ def aggregate_drops(path, routes, cuts=()):
     meta = {}
     total = used = 0
     fcnt = defaultdict(int)      # (month, mapId, cell, 敵編成) -> n
+    comp = defaultdict(lambda: [0, 0])   # (month, mapId, cell, 本隊, 随伴, 陣形, 艦隊名) -> [n, 基本経験値]
     hold = {}                    # 同上 -> [(bk, rc, sid)] (FLEET_HOLD 回まで)
     rej = defaultdict(int)       # (month, mapId, cell, 理由) -> n
     repo = {}                    # (month, mapId, cell, sid) -> [set(報告者), Counter(ツール), Counter(時)]
@@ -392,6 +433,14 @@ def aggregate_drops(path, routes, cuts=()):
         used += 1
         fk = (mo, map_id, cell, fleet)
         fcnt[fk] += 1
+        try:
+            ck = (mo, map_id, cell, fleet, tuple(d.get("enemyShips2") or ()),
+                  int(d.get("enemyFormation") or 0), str(d.get("enemy") or "")[:30])
+            cv = comp[ck]
+            cv[0] += 1
+            cv[1] = max(cv[1], int(d.get("baseExp") or 0))
+        except (TypeError, ValueError):
+            pass
         if fcnt[fk] <= FLEET_HOLD:
             hold.setdefault(fk, []).append((bk, rc, sid, q))
         elif fk in hold:
@@ -463,7 +512,7 @@ def aggregate_drops(path, routes, cuts=()):
     for mo, (n, first, last) in meta.items():
         out[mo] = {"v": STATE_VERSION, "month": mo, "records": n, "first": first, "last": last,
                    "cuts": cuts, "final": False, "tot": {}, "dden": {}, "dsid": {}, "lastdrop": {},
-                   "rep": {}, "orig": {}, "rej": {}}
+                   "rep": {}, "orig": {}, "rej": {}, "comp": {}}
     unknown = set()
     for (mo, map_id, cell, rc, sid), n in cnt.items():
         m, node = place(map_id, cell)
@@ -515,9 +564,74 @@ def aggregate_drops(path, routes, cuts=()):
         m, node = place(map_id, cell)
         o = out[mo]["rej"].setdefault(m, {}).setdefault(node, {})
         o[reason] = o.get(reason, 0) + n
+    # 敵編成: マスごと (セル番号違いの同じマスは足す) に、多い順に COMP_KEEP 個まで
+    tmp = defaultdict(lambda: defaultdict(lambda: [0, 0]))
+    for (mo, map_id, cell, f1, f2, fm, nm), (n, ex) in comp.items():
+        m, node = place(map_id, cell)
+        v = tmp[(mo, m, node)][(f1, f2, fm, nm)]
+        v[0] += n
+        v[1] = max(v[1], ex)
+    for (mo, m, node), fl in tmp.items():
+        if mo not in out:
+            continue
+        tot = sum(v[0] for v in fl.values())
+        top = sorted(fl.items(), key=lambda kv: -kv[1][0])[:COMP_KEEP]
+        out[mo]["comp"].setdefault(m, {})[node] = {
+            "n": tot, "f": [[list(f1), list(f2), fm, nm, n, ex] for (f1, f2, fm, nm), (n, ex) in top]}
     if unknown:
         warn("マス名が不明なセルがあります (#番号で表示): " + ", ".join(sorted(unknown)[:30]))
     return out
+
+
+def build_enemy_data(states, now):
+    """公開ページの「敵編成」用 (data/enemy.json)。最新の月 (記録が少ないマスは前の月も合わせて) の敵編成を、
+    出た割合の多い順に出す。誤記録のような、ほとんど出ない編成 (COMP_MIN_SHARE 未満) は出さない。"""
+    em = load_json(os.path.join(ROOT, "data", "enemy_master.json"), {}) or {}
+    months = sorted((mo for mo, st in states.items() if st.get("comp")), reverse=True)
+    maps, used = {}, set()
+    places = {(m, node) for mo in months[:2] for m, v in states[mo]["comp"].items() for node in v}
+    for m, node in places:
+        acc, n, src = defaultdict(lambda: [0, 0]), 0, []
+        for mo in months[:2]:
+            c = states[mo]["comp"].get(m, {}).get(node)
+            if not c:
+                continue
+            for f1, f2, fm, nm, k, ex in c["f"]:
+                v = acc[(tuple(f1), tuple(f2), fm, nm)]
+                v[0] += k
+                v[1] = max(v[1], ex)
+            n += c["n"]
+            src.append(mo)
+            if n >= COMP_MIN_RECORDS:
+                break
+        # 同じ顔ぶれで陣形だけ違うものは 1 つにまとめ、陣形ごとの割合を付ける
+        grp = {}
+        for (f1, f2, fm, nm), (k, ex) in acc.items():
+            g = grp.setdefault((f1, f2, nm), {"k": 0, "exp": 0, "fm": defaultdict(int)})
+            g["k"] += k
+            g["exp"] = max(g["exp"], ex)
+            g["fm"][fm] += k
+        fl = []
+        for (f1, f2, nm), g in sorted(grp.items(), key=lambda kv: -kv[1]["k"]):
+            if n and g["k"] / n >= COMP_MIN_SHARE:
+                fms = [[fm, round(k / g["k"] * 100)] for fm, k in sorted(g["fm"].items(), key=lambda kv: -kv[1])
+                       if k / g["k"] >= 0.02]
+                fl.append({"s": list(f1), "s2": list(f2), "nm": nm, "r": round(g["k"] / n * 100, 1), "k": g["k"],
+                           "exp": g["exp"], "fm": fms})
+                used.update(f1)
+                used.update(f2)
+        if fl:
+            maps.setdefault(m, {})[node] = {"n": n, "months": sorted(src), "fleets": fl}
+    ships = {str(i): em[str(i)] for i in sorted(used) if str(i) in em}
+    for i in sorted(used):
+        ships.setdefault(str(i), {"n": f"#{i}", "y": "", "t": ""})
+    return {"generated": fmt_dt(now), "formations": {str(k): v for k, v in FORMATIONS.items()},
+            "sources": [{"name": "poi-db ドロップ記録 (poi-server)", "url": "https://github.com/poooi/poi-server/wiki",
+                         "use": "敵編成・陣形・出た割合"},
+                        {"name": "KC3改 abyssal_stats.json", "url": "https://github.com/KC3Kai/KC3Kai",
+                         "use": "敵艦の耐久・装甲・火力など"},
+                        {"name": "api_start2 (Tibowl)", "url": "https://github.com/Tibowl/api_start2", "use": "敵艦の名前・艦種"}],
+            "ships": ships, "maps": maps}
 
 
 # ---------------------------------------------------------------- 建造集計
@@ -1671,15 +1785,17 @@ def main():
     meta_path = os.path.join(args.state_dir, "meta.json")
     meta = load_json(meta_path, {}) or {}
     sig = hashlib.sha1(json.dumps([sorted(cuts), STATE_VERSION], sort_keys=True).encode()).hexdigest()
+    # 当月の保存データに敵編成 (comp) が無いとき (この機能を入れた直後) は、取り直して作る
+    has_comp = "comp" in (drop_states.get(month_of(now)) or {})
     skip_dump = (args.smart and meta.get("sig") == sig and now - meta.get("fetched_at", 0) < 20 * 3600
-                 and month_of(now) in drop_states)
+                 and month_of(now) in drop_states and has_comp)
     # 毎朝 5〜9 時に何度か起動するので、ダンプが前回から更新されていなければ取り直さない
     dump_ver = {}
     if not skip_dump and not args.no_download and not args.drop_file and month_of(now) in drop_states:
         for fname in ("dropshiprecords.gz", "createshiprecords.gz"):
             dump_ver[fname] = http_head(DUMP_BASE + fname)
         same_dump = all(v and v == (meta.get("dump_ver") or {}).get(k) for k, v in dump_ver.items())
-        if same_dump and meta.get("sig") == sig:
+        if same_dump and meta.get("sig") == sig and has_comp:
             skip_dump = True
             log("ダンプは前回の取得から更新されていないため、取り直しません")
     if skip_dump:
@@ -1860,6 +1976,10 @@ def main():
 
     if not same(old_drop, drop):
         save_json(os.path.join(ROOT, "Drop_Data.json"), drop, compact=True)
+    enemy = build_enemy_data(drop_states, now)
+    epath = os.path.join(ROOT, "data", "enemy.json")
+    if enemy["maps"] and not same(load_json(epath), enemy):
+        save_json(epath, enemy, compact=True)
     if not same(load_json(os.path.join(ROOT, "Build_Data.json")), build):
         save_json(os.path.join(ROOT, "Build_Data.json"), build, compact=True)
     n_lim = sum(1 for m in drop["maps"].values() for v in m.values() for r in v["ships"] if r[2])
