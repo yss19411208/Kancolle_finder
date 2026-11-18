@@ -396,7 +396,6 @@ def aggregate_drops(path, routes, cuts=()):
     rej = defaultdict(int)       # (month, mapId, cell, 理由) -> n
     repo = {}                    # (month, mapId, cell, sid) -> [set(報告者), Counter(ツール), Counter(時)]
     orig = defaultdict(int)      # (month, mapId, cell, ツール) -> n
-    quest_of = {}                # mapId -> 最初に見た海域名 (後で多数決)
     quests = defaultdict(lambda: defaultdict(int))
     for d in iter_archive_docs(path):
         if "mapId" not in d or "_id" not in d:

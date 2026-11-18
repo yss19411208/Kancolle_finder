@@ -25,6 +25,8 @@ on:
       - data/limited_extra.json
       - data/limited_src/current.html   # 管理画面から限定ページの HTML を送ったとき
       - data/limited_src/archive.html
+      - data/limited_src/current.html.enc
+      - data/limited_src/archive.html.enc
 
 permissions:
   contents: write
@@ -38,6 +40,10 @@ jobs:
   update:
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    env:
+      # よそのページの原本 (Wiki・艦ろぐ) を公開リポジトリに読める形で置かないための鍵 (scripts/rawstore.py)。
+      # リポジトリの Settings → Secrets and variables → Actions に RAW_KEY を登録する
+      RAW_KEY: ${{ secrets.RAW_KEY }}
     steps:
       # 保存の直後に複数回起動された場合でも、常に最新の main で集計する
       - uses: actions/checkout@v4
@@ -60,6 +66,10 @@ jobs:
           python-version: "3.12"
 
       - run: pip install --quiet -r scripts/requirements.txt
+
+      # 平文で置いてある原本 (限定ページの HTML) があれば暗号化する (RAW_KEY が無ければ何もしない)
+      - name: 原本を暗号化
+        run: python scripts/rawstore.py migrate data/limited_src
 
       # 艦これ攻略Wiki「期間限定ドロップイベント」を取得して data/limited_page.json を作り直す。
       # 定時実行では 1 日 1 回だけ取りに行く。取れなくても保存済みのページで続ける
@@ -103,10 +113,12 @@ jobs:
             # 集計中に管理画面で保存されるなどして main が進んでいた場合:
             # 生成ファイル同士をマージせず、最新の main に合わせて集計し直す (ダンプは取り直さない)
             echo "main が更新されていたため、最新の設定で集計し直します ($i 回目)"
-            mkdir -p /tmp/limsrc && cp data/limited_src/current.html data/limited_src/status.json /tmp/limsrc/ 2>/dev/null || true
+            rm -rf /tmp/limsrc && mkdir -p /tmp/limsrc
+            cp data/limited_src/current.html* data/limited_src/status.json /tmp/limsrc/ 2>/dev/null || true
             git fetch --quiet origin main
             git reset --quiet --hard origin/main
             cp /tmp/limsrc/* data/limited_src/ 2>/dev/null || true   # この実行で Wiki から取ったページは残す
+            python scripts/rawstore.py migrate data/limited_src
             python scripts/fetch_limited_page.py --no-fetch || true
             KL=""; [ -f /tmp/kanlog.json ] && KL="--kanlog /tmp/kanlog.json"
             python scripts/update.py --state-dir state --no-download $KL

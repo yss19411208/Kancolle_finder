@@ -20,6 +20,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, 'scripts'))
 from update import norm_name
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rawstore  # noqa: E402
+
 SRC_DIR = os.path.join(ROOT, 'data', 'limited_src')
 ships = json.load(open(os.path.join(ROOT, 'data', 'ship_master.json'), encoding='utf-8'))
 names = {norm_name(v['name']): v['name'] for v in ships.values()}
@@ -283,8 +286,11 @@ def default_sources():
     out = []
     for fn in ('current.html', 'archive.html'):
         p = os.path.join(SRC_DIR, fn)
-        if os.path.exists(p):
-            out.append((p, None))
+        data = rawstore.read(p)          # 暗号化されていれば (current.html.enc) 復号して読む
+        if data is not None:
+            out.append((p, data.decode('utf-8', errors='replace')))
+        elif os.path.exists(p + rawstore.SUFFIX):
+            print(f"::warning::{fn} は暗号化されていますが、RAW_KEY が無いので読めません")
     return out
 
 

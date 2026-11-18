@@ -27,8 +27,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install --quiet -r scripts/requirements.txt
+      # 入力は env で渡す (${{ }} を直接コマンドに埋め込むと、入力の中身がシェルとして実行されうる)
       - name: 記録を取り出す
-        run: python scripts/extract_records.py --month "${{ inputs.month }}" --targets "${{ inputs.targets }}" --out out
+        env:
+          IN_MONTH: ${{ inputs.month }}
+          IN_TARGETS: ${{ inputs.targets }}
+        run: python scripts/extract_records.py --month "$IN_MONTH" --targets "$IN_TARGETS" --out out
       - uses: actions/upload-artifact@v4
         with:
           name: records-${{ inputs.month || 'current' }}

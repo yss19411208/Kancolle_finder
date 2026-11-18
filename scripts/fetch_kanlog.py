@@ -21,6 +21,9 @@ import sys
 import time
 import urllib.request
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rawstore  # noqa: E402  原本は公開リポジトリに読める形で置かない
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BASE = os.environ.get("KANLOG_BASE", "https://kanlog.info")
 UA = "Kancolle_finder-updater (+https://github.com/yss19411208/Kancolle_finder)"
@@ -44,9 +47,8 @@ def site_updated(html):
 
 
 def save(out, name, html):
-    os.makedirs(os.path.join(out, "raw"), exist_ok=True)
-    with gzip.open(os.path.join(out, "raw", name + ".html.gz"), "wt", encoding="utf-8") as f:
-        f.write(html)
+    # RAW_KEY があれば暗号化して raw/名前.html.gz.enc に置く (rawstore.py)
+    rawstore.write(os.path.join(out, "raw", name + ".html.gz"), gzip.compress(html.encode("utf-8")))
 
 
 def main():
@@ -61,6 +63,11 @@ def main():
     except (OSError, ValueError):
         meta = {}
     now = int(time.time())
+    # GitHub の時刻指定が遅れて、管理画面の見張りが起動した分と 2 回動くことがある。
+    # 艦ろぐへのアクセスは 2 時間に 1 回の約束なので、50 分以内に確かめたばかりなら何もしない
+    if not args.force and now - int(meta.get("checked_at") or 0) < 50 * 60:
+        log("50 分以内に確かめたばかりなので、今回は艦ろぐにアクセスしません")
+        return
     routes = json.load(open(os.path.join(ROOT, "data", "map_routes.json"), encoding="utf-8"))
     maps = sorted(routes, key=lambda m: [int(x) for x in m.split("-")])
 

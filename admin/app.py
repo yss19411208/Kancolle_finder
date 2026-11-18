@@ -13,6 +13,7 @@ import hmac
 import json
 import os
 import secrets
+import subprocess
 import threading
 import time
 import urllib.error
@@ -74,6 +75,27 @@ app.config.update(
 FAILS = {}          # ip -> [回数, 最終失敗時刻]
 LOCK_AFTER = 5
 LOCK_SECONDS = 600
+GLOBAL_LOCK_AFTER = 30      # 10 分間に全体でこれだけ失敗したら、全員のログインを 10 分止める (IP を変えての総当たり対策)
+FAIL_TIMES = []             # 全体の失敗時刻
+FAIL_LOCK = threading.Lock()
+
+
+def global_locked():
+    with FAIL_LOCK:
+        cut = time.time() - LOCK_SECONDS
+        FAIL_TIMES[:] = [t for t in FAIL_TIMES if t >= cut]
+        return len(FAIL_TIMES) >= GLOBAL_LOCK_AFTER
+
+
+def note_fail(ip):
+    with FAIL_LOCK:
+        now = time.time()
+        FAIL_TIMES.append(now)
+        n, _ = FAILS.get(ip, (0, 0))
+        FAILS[ip] = (n + 1, now)
+        if len(FAILS) > 1000:       # 古い記録を捨てる (メモリを使い続けないように)
+            for k in [k for k, (_, t) in FAILS.items() if now - t >= LOCK_SECONDS]:
+                FAILS.pop(k, None)
 
 
 def client_ip():
@@ -109,7 +131,7 @@ def login():
     error = None
     if request.method == "POST":
         ip = client_ip()
-        if locked(ip):
+        if locked(ip) or global_locked():
             error = "試行回数が多すぎます。10分後にやり直してください。"
         else:
             user = request.form.get("user", "")
@@ -123,8 +145,7 @@ def login():
                 session["user"] = user
                 session["csrf"] = secrets.token_urlsafe(32)
                 return redirect(url_for("index"))
-            n, _ = FAILS.get(ip, (0, 0))
-            FAILS[ip] = (n + 1, time.time())
+            note_fail(ip)
             time.sleep(float(os.environ.get("LOGIN_DELAY", "1")))
             error = "ユーザー名またはパスワードが違います。"
     return render_template("login.html", error=error, configured=bool(ADMIN_HASH and TOKEN))
@@ -320,16 +341,39 @@ def put_limsrc(which):
                              "のページを保存した HTML ではないようです"), 400
     if which == "current" and "アーカイブ" in (head.split("<title>", 1)[-1].split("</title>", 1)[0]):
         return jsonify(error="これはアーカイブのページです。「アーカイブのページ」の方から送ってください"), 400
+    # 公開リポジトリに Wiki のページを読める形で置かないよう、RAW_KEY があれば暗号化して「.enc」で置く
+    # (GitHub Actions 側の scripts/rawstore.py と同じ方式・同じ鍵)
+    data = html.encode("utf-8")
+    plain = path
+    if RAW_KEY:
+        data = encrypt_raw(data)
+        path = path + ".enc"
     payload = {
         "message": f"管理画面: 限定ページ ({'今のページ' if which == 'current' else 'アーカイブ'}) の HTML を更新",
-        "content": base64.b64encode(html.encode("utf-8")).decode(),
+        "content": base64.b64encode(data).decode(),
         "branch": BRANCH,
     }
     sha = file_sha(path)
     if sha:
         payload["sha"] = sha
     gh("PUT", f"/contents/{path}", payload)
-    return jsonify(ok=True)
+    if RAW_KEY:
+        old = file_sha(plain)       # 平文の古い原本が残っていれば消す
+        if old:
+            gh("DELETE", f"/contents/{plain}", {"message": "管理画面: 平文の原本を削除 (暗号化したものに置き換え)",
+                                                "sha": old, "branch": BRANCH})
+    return jsonify(ok=True, encrypted=bool(RAW_KEY))
+
+
+RAW_KEY = os.environ.get("RAW_KEY", "").strip()
+
+
+def encrypt_raw(data):
+    r = subprocess.run(["openssl", "enc", "-aes-256-cbc", "-pbkdf2", "-iter", "200000", "-salt", "-pass", "env:RAW_KEY"],
+                       input=data, capture_output=True, check=False, env={**os.environ, "RAW_KEY": RAW_KEY})
+    if r.returncode != 0:
+        raise GitHubError(500, "暗号化できませんでした (openssl)")
+    return r.stdout
 
 
 @app.route("/api/rerun", methods=["POST"])

@@ -906,7 +906,22 @@ function mapCmp(a, b) {
   const [b1,b2] = b.split('-').map(Number);
   return a1 !== b1 ? a1-b1 : a2-b2;
 }
-function esc(s) { return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+// onclick="…('ここ')…" に入れる文字列: JS の文字列として、さらに HTML の属性として安全にする
+function esc(s) { return htmlEsc(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ')); }
+// 読み込んだデータの文字列 (キーも) から、HTML・JS を壊す記号を全角に置き換える。
+// データは自前の集計結果だが、元は外部 (poi・Wiki・艦ろぐ・KC3改) なので、念のためここで無害にしておく
+const UNSAFE = { '<': '＜', '>': '＞', '"': '”', "'": '’', '`': '｀', '\\': '＼' };
+function cleanData(v) {
+  if (typeof v === 'string') return v.replace(/[<>"'`\\]/g, c => UNSAFE[c]);
+  if (Array.isArray(v)) return v.map(cleanData);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const [k, x] of Object.entries(v)) o[cleanData(k)] = cleanData(x);
+    return o;
+  }
+  return v;
+}
+const safeUrl = u => (typeof u === 'string' && /^https:\/\/[^\s"'<>]+$/.test(u)) ? u : '#';
 
 function mediaHtml(map, size) {
   const cls = size === 'sm' ? 'map-media-sm' : 'map-media';
@@ -1035,9 +1050,9 @@ function buildUpdateDrawer() {
     return;
   }
   body.innerHTML = UPDATE.slice().reverse().map(u => {
-    const items = (u['更新内容'] || []).map(s => `<div class="update-item">${s}</div>`).join('');
+    const items = (u['更新内容'] || []).map(s => `<div class="update-item">${htmlEsc(s)}</div>`).join('');
     return `<div class="update-entry">
-      <div class="update-date">${u['更新日時'] || '不明'}</div>
+      <div class="update-date">${htmlEsc(u['更新日時'] || '不明')}</div>
       <div class="update-items">${items || '<div class="update-item">（内容なし）</div>'}</div>
     </div>`;
   }).join('');
@@ -1400,13 +1415,13 @@ let enemyData = null, enemyLoading = null, enemyShip = '', enemyAt = ['', ''];
 const enemyDrops = {};      // 海域 -> data/enemy_drop/海域.json (編成ごとに出た艦)
 function loadEnemyDrops(map) {
   if (!enemyDrops[map]) enemyDrops[map] = fetch(`data/enemy_drop/${map}.json`, { cache: 'no-cache' })
-    .then(r => r.ok ? r.json() : {}).catch(() => ({}));
+    .then(r => r.ok ? r.json() : {}).then(cleanData).catch(() => ({}));
   return enemyDrops[map];
 }
 const pctE = (a, b) => b ? (a / b * 100 >= 10 ? (a / b * 100).toFixed(1) : (a / b * 100).toFixed(2)) + '%' : '—';
 function loadEnemy() {
   if (!enemyLoading) enemyLoading = fetch('data/enemy.json', { cache: 'no-cache' })
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(cleanData)
     .then(d => (enemyData = d))
     .catch(e => { enemyLoading = null; throw e; });
   return enemyLoading;
@@ -1568,7 +1583,7 @@ $('mapSelect').onchange = showMap;
 // ============================================================
 function renderSources() {
   const d = DROP_INFO, b = BUILD_INFO;
-  const li = (d.sources || []).map(x => `<li><a href="${x.url}" target="_blank" rel="noopener">${x.name}</a> … ${x.use}</li>`).join('');
+  const li = (d.sources || []).map(x => `<li><a href="${safeUrl(x.url)}" target="_blank" rel="noopener">${htmlEsc(x.name || '')}</a> … ${htmlEsc(x.use || '')}</li>`).join('');
   const lines = [
     d.records ? `ドロップ記録: ${Number(d.records).toLocaleString()} 件（${(d.months || []).join('、')} / ${d.data_from || '?'} ～ ${d.data_to || '?'}）` : '',
     d.cutoff ? `限定ドロップ: ${d.cutoff} 以降の記録（${(d.limited_months || []).join('、')}）` : '限定ドロップ: 集計期間の全記録',
@@ -1595,6 +1610,7 @@ function computeBuild(raw) {
 //  初期化
 // ============================================================
 const getJson = (f, fb) => fetch(f, { cache: 'no-cache' }).then(r => { if (!r.ok) throw new Error(f + ' を読み込めません'); return r.json(); })
+  .then(cleanData)
   .catch(e => { if (fb === undefined) throw e; return fb; });
 Promise.all([
   getJson('Drop_Data.json'),

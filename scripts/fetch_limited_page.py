@@ -22,6 +22,7 @@ import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import parse_limited_page as P  # noqa: E402
+import rawstore  # noqa: E402
 
 URL = "https://wikiwiki.jp/kancolle/" + urllib.parse.quote("期間限定ドロップイベント")
 UA = "Kancolle_finder-updater (+https://github.com/yss19411208/Kancolle_finder)"
@@ -72,19 +73,18 @@ def main():
                 raise ValueError("ページの中身が想定と違います（ログインやアクセス制限の画面の可能性）")
             # 保存済みの HTML と比べて、明らかに少なければ使わない
             old_ev = {"events": 0, "ongoing": 0}
-            if os.path.exists(CUR):
-                _, info = P.build_page([(CUR, None)])
+            old_raw = rawstore.read(CUR)
+            old_html = old_raw.decode("utf-8", errors="replace") if old_raw else ""
+            if old_html:
+                _, info = P.build_page([(CUR, old_html)])
                 old_ev = info[0]
             _, info = P.build_page([("Wiki から取得したページ", html)])
             new_ev = info[0]
             if new_ev["events"] < max(1, old_ev["events"] * 0.7) or (old_ev["ongoing"] and not new_ev["ongoing"]):
                 raise ValueError(f"読み取れたイベントが少なすぎます（取得 {new_ev['events']} 件 / 保存済み "
                                  f"{old_ev['events']} 件、継続中一覧 {new_ev['ongoing']} 海域）")
-            old_html = open(CUR, encoding="utf-8", errors="replace").read() if os.path.exists(CUR) else ""
             if html != old_html:
-                os.makedirs(P.SRC_DIR, exist_ok=True)
-                with open(CUR, "w", encoding="utf-8") as f:
-                    f.write(html)
+                rawstore.write(CUR, html.encode("utf-8"))      # RAW_KEY があれば暗号化して current.html.enc
                 changed_src = True
             st.update(ok=True, source="wiki", got_at=now)
             msg = f"Wiki から取得しました（イベント {new_ev['events']} 件・継続中一覧 {new_ev['ongoing']} 海域）"
@@ -94,6 +94,12 @@ def main():
             print("::warning::" + msg)
 
     srcs = P.default_sources()
+    locked = [fn for fn in ("current.html", "archive.html")
+              if os.path.exists(os.path.join(P.SRC_DIR, fn + rawstore.SUFFIX)) and not rawstore.key()]
+    if locked:
+        # 一部だけで作り直すと、終わった限定の情報などが消えてしまうので、前回の結果をそのまま使う
+        print(f"::warning::{'・'.join(locked)} は暗号化されていますが RAW_KEY が無いので、data/limited_page.json はそのままにします")
+        return
     if not srcs:
         print("data/limited_src/ に HTML が無いので、data/limited_page.json はそのままにします")
         return

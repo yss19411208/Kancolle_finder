@@ -28,6 +28,9 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import rawstore  # noqa: E402
+
 
 def scripts(h):
     out = {}
@@ -125,12 +128,15 @@ def main():
         meta = {}
     out = {"site_updated": meta.get("site_updated", ""), "fetched_at": meta.get("fetched_at", 0), "maps": {}}
     n_ships = n_lim = 0
-    for f in sorted(glob.glob(os.path.join(args.raw, "raw", "map_*.html.gz"))):
+    files = sorted({rawstore.plain_name(f) for f in glob.glob(os.path.join(args.raw, "raw", "map_*.html.gz*"))})
+    for f in files:
         mid = int(re.search(r"map_(\d+)", f).group(1))
         m = f"{mid // 10}-{mid % 10}"
         try:
-            with gzip.open(f, "rt", encoding="utf-8") as fh:
-                r = parse_map(fh.read())
+            data = rawstore.read(f)
+            if data is None:
+                raise OSError("暗号化されたページを開けません（RAW_KEY が設定されていない）")
+            r = parse_map(gzip.decompress(data).decode("utf-8"))
         except (OSError, ValueError) as e:
             print(f"::warning::艦ろぐ {m} を読み取れませんでした: {e}")
             continue
@@ -142,9 +148,9 @@ def main():
         n_lim += sum(len(nd["lim"]) for nd in r["nodes"].values())
     if not out["site_updated"]:
         # 古い fetch_kanlog.py は更新日時を読み取れていなかったので、ページから読む
-        for f in glob.glob(os.path.join(args.raw, "raw", "limited.html.gz")):
-            with gzip.open(f, "rt", encoding="utf-8") as fh:
-                m = re.search(r"更新日時[：:]\s*(?:<time[^>]*>)?\s*([0-9]{1,2}/[0-9]{1,2}\s+[0-9]{1,2}:[0-9]{2})", fh.read())
+        data = rawstore.read(os.path.join(args.raw, "raw", "limited.html.gz"))
+        for txt in ([gzip.decompress(data).decode("utf-8")] if data else []):
+            m = re.search(r"更新日時[：:]\s*(?:<time[^>]*>)?\s*([0-9]{1,2}/[0-9]{1,2}\s+[0-9]{1,2}:[0-9]{2})", txt)
             if m:
                 out["site_updated"] = m.group(1)
     with open(args.out, "w", encoding="utf-8") as f:
