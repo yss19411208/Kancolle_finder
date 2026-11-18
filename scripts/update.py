@@ -67,11 +67,10 @@ START2_URLS = [
 POI_MAP_URL = "https://raw.githubusercontent.com/poooi/poi/master/assets/data/fcd/map.json"
 KC3_EDGES_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/edges.json"
 KC3_ABYSSAL_URL = "https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/abyssal_stats.json"
-# 敵編成: 1 か月・1 マスあたり、保存する編成の数と、表示する編成の割合の下限
-COMP_KEEP = 20
-COMP_VERSION = 2         # 2: 編成ごとに出た艦を、アップデート日時 (cuts) で区切った期間ごとに持つ
-COMP_SHIP_KEEP = 15      # 艦ごとに出す「ドロップした編成」の数
-COMP_MIN_SHARE = 0.005
+# 敵編成
+COMP_VERSION = 3         # 2: 編成ごとに出た艦を、アップデート日時 (cuts) で区切った期間ごとに持つ
+                         # 3: 誤記録として捨てた記録は編成からも除き、編成は数を絞らずにすべて持つ
+COMP_MAX = 300           # 1 マス・1 期間で持つ編成の上限 (異常なデータへの備え。普通はこれよりずっと少ない)
 COMP_MIN_RECORDS = 300   # 当月の記録がこれより少ないマスは、前の月の分も合わせて出す
 FORMATIONS = {1: "単縦陣", 2: "複縦陣", 3: "輪形陣", 4: "梯形陣", 5: "単横陣", 6: "警戒陣",
               11: "第一警戒航行序列", 12: "第二警戒航行序列", 13: "第三警戒航行序列", 14: "第四警戒航行序列"}
@@ -435,6 +434,7 @@ def aggregate_drops(path, routes, cuts=()):
         used += 1
         fk = (mo, map_id, cell, fleet)
         fcnt[fk] += 1
+        ck = None
         try:
             ci = bisect.bisect_right(cuts, ts)
             sg = cuts[ci - 1] if ci and cuts[ci - 1] >= month_start(mo) - 9 * 3600 else month_start(mo) - 9 * 3600
@@ -449,7 +449,7 @@ def aggregate_drops(path, routes, cuts=()):
         except (TypeError, ValueError):
             pass
         if fcnt[fk] <= FLEET_HOLD:
-            hold.setdefault(fk, []).append((bk, rc, sid, q))
+            hold.setdefault(fk, []).append((bk, rc, sid, q, ck))
         elif fk in hold:
             del hold[fk]
         ok = str(d.get("origin") or "?").split("/")[0]
@@ -488,12 +488,18 @@ def aggregate_drops(path, routes, cuts=()):
     dropped = 0
     for (mo, map_id, cell, fleet), lst in hold.items():
         bad_fleet = fcnt[(mo, map_id, cell, fleet)] / max(1, node_n[(mo, map_id, cell)]) < FLEET_MIN_SHARE
-        for bk, rc, sid, q in lst:
+        for bk, rc, sid, q, ck in lst:
             reason = ("ほかのマスの敵編成" if bad_fleet else
                       "海域名が違う" if q != main_q.get(map_id) else None)
             if not reason:
                 continue
             dropped += 1
+            cv = comp.get(ck) if ck else None       # 敵編成の集計からも除く
+            if cv:
+                cv[0] -= 1
+                cv[2 + rc] -= 1
+                if sid:
+                    cv[4][sid][rc] -= 1
             rej[(mo, map_id, cell, reason)] += 1
             cnt[(mo, map_id, cell, rc, sid)] -= 1
             dden[(mo, map_id, cell, bk, rc)] -= 1
@@ -505,6 +511,11 @@ def aggregate_drops(path, routes, cuts=()):
     for dct in (cnt, dden, dsid):
         for k in [k for k, v in dct.items() if v <= 0]:
             del dct[k]
+    for k in [k for k, v in comp.items() if v[0] <= 0]:
+        del comp[k]
+    for v in comp.values():
+        for sid_ in [x for x, ab in v[4].items() if ab[0] + ab[1] <= 0]:
+            del v[4][sid_]
     alive = {(k[0], k[1], k[2], k[5]) for k in dsid}
     for k in [k for k in lastdrop if k not in alive]:
         del lastdrop[k]
@@ -571,7 +582,7 @@ def aggregate_drops(path, routes, cuts=()):
         m, node = place(map_id, cell)
         o = out[mo]["rej"].setdefault(m, {}).setdefault(node, {})
         o[reason] = o.get(reason, 0) + n
-    # 敵編成: マスごと (セル番号違いの同じマスは足す) に、多い順に COMP_KEEP 個まで
+    # 敵編成: マスごと (セル番号違いの同じマスは足す) に、すべて
     # 編成ごとに、その編成の戦闘で出た艦の数も残す (「この編成で出た」「この編成での率」の表示用)
     tmp = defaultdict(lambda: defaultdict(lambda: [0, 0, 0, 0, defaultdict(lambda: [0, 0])]))
     for (mo, map_id, cell, f1, f2, fm, nm, sg), (n, ex, bS, bO, dr) in comp.items():
@@ -588,11 +599,11 @@ def aggregate_drops(path, routes, cuts=()):
         if mo not in out:
             continue
         tot = sum(v[0] for v in fl.values())
-        # 期間 (アップデートで区切った区間) ごとに、多い順に COMP_KEEP 個まで
+        # 期間 (アップデートで区切った区間) ごとに、すべて (異常なデータへの備えとして COMP_MAX 個まで)
         bysg = defaultdict(list)
         for kk, vv in fl.items():
             bysg[kk[4]].append((kk, vv))
-        top = [x for lst in bysg.values() for x in sorted(lst, key=lambda kv: -kv[1][0])[:COMP_KEEP]]
+        top = [x for lst in bysg.values() for x in sorted(lst, key=lambda kv: -kv[1][0])[:COMP_MAX]]
         out[mo]["comp"].setdefault(m, {})[node] = {
             "n": tot, "f": [[list(f1), list(f2), fm, nm, n, ex, bS, bO, {str(k): v for k, v in dr.items()}, sg]
                             for (f1, f2, fm, nm, sg), (n, ex, bS, bO, dr) in top]}
@@ -603,11 +614,14 @@ def aggregate_drops(path, routes, cuts=()):
 
 def build_enemy_data(states, now, ships_by_id=None, judge=None, cutoff=None):
     """公開ページの「敵編成」用 (data/enemy.json)。最新の月 (記録が少ないマスは前の月も合わせて) の敵編成を、
-    出た割合の多い順に出す。誤記録のような、ほとんど出ない編成 (COMP_MIN_SHARE 未満) は出さない。"""
+    出た割合の多い順に、誤記録として捨てた編成以外をすべて出す。"""
     em = load_json(os.path.join(ROOT, "data", "enemy_master.json"), {}) or {}
     ships_by_id = ships_by_id or {}
     months = sorted((mo for mo, st in states.items() if st.get("comp")), reverse=True)
     maps, used = {}, set()
+    # 誤記録の編成は、COMP_VERSION 3 で取り込んだ月では集計の段階で除いてある。それより前の形式の月が
+    # 混じっている間は、取り込みのときの誤記録の目安 (FLEET_MIN_SHARE 未満) で除く
+    min_share = 0.0 if all(states[mo].get("compv", 0) >= 3 for mo in months[:2]) else FLEET_MIN_SHARE
     places = {(m, node) for mo in months[:2] for m, v in states[mo]["comp"].items() for node in v}
     for m, node in places:
         acc, n, src = defaultdict(lambda: [0, 0, 0, 0, {}]), 0, []
@@ -646,7 +660,7 @@ def build_enemy_data(states, now, ships_by_id=None, judge=None, cutoff=None):
                 w[1] += b
         fl = []
         for (f1, f2, nm), g in sorted(grp.items(), key=lambda kv: -kv[1]["k"]):
-            if n and g["k"] / n >= COMP_MIN_SHARE:
+            if n and g["k"] / n >= min_share:
                 fms = [[fm, round(k / g["k"] * 100)] for fm, k in sorted(g["fm"].items(), key=lambda kv: -kv[1])
                        if k / g["k"] >= 0.02]
                 fl.append({"s": list(f1), "s2": list(f2), "nm": nm, "r": round(g["k"] / n * 100, 1), "k": g["k"],
@@ -688,6 +702,13 @@ def build_enemy_drops(states, maps, ships_by_id, judge, cutoff, used):
         pubs[(x["map"], x["node"])][sid_of[x["ship"]]] = (cutoff if (lim and cutoff) else None, lim)
     # 編成の組み合わせごとに全期間の記録を集める: (海域, マス) -> [(期間の開始, 編成キー, k, bS, bO, {艦ID: [S, A/B]})]
     rows = defaultdict(list)
+    min_share = 0.0 if all(st.get("compv", 0) >= 3 for st in states.values() if st.get("comp")) else FLEET_MIN_SHARE
+    recent = sorted((mo for mo, st in states.items() if st.get("comp")), reverse=True)[:2]
+    seen_recent = defaultdict(set)      # (海域, マス) -> 最近 2 か月に出た編成 (割合に関係なく)
+    for mo in recent:
+        for m, nodes in states[mo]["comp"].items():
+            for node, c in nodes.items():
+                seen_recent[(m, node)].update((tuple(r[0]), tuple(r[1]), r[3]) for r in c["f"])
     for mo in sorted(states):
         for m, nodes in (states[mo].get("comp") or {}).items():
             for node, c in nodes.items():
@@ -735,20 +756,18 @@ def build_enemy_drops(states, maps, ships_by_id, judge, cutoff, used):
                     continue
                 tot[0] += x[0]
                 tot[1] += x[1]
-                if k / n < COMP_MIN_SHARE:      # ほとんど出ない編成 (誤記録のことが多い) はまとめる
+                if k / n < min_share:           # 誤記録の編成 (古い形式の月が混じっている間だけ)
                     other[0] += x[0]
                     other[1] += x[1]
                     continue
                 got.append((key, x, bS, bO, k))
             got.sort(key=lambda t: -(t[1][0] + t[1][1]))
-            for key, x, bS, bO, k in got[COMP_SHIP_KEEP:]:
-                other[0] += x[0]
-                other[1] += x[1]
             d = []
-            for key, x, bS, bO, k in got[:COMP_SHIP_KEEP]:
+            for key, x, bS, bO, k in got:       # 誤記録以外は、すべての編成を出す
                 if key not in fidx:
                     fidx[key] = len(fl)
-                    fl.append({"s": list(key[0]), "s2": list(key[1]), "nm": key[2], "c": cur.get(key, -1)})
+                    fl.append({"s": list(key[0]), "s2": list(key[1]), "nm": key[2], "c": cur.get(key, -1),
+                               "recent": int(key in seen_recent[(m, node)])})
                     used.update(key[0])
                     used.update(key[1])
                 d.append([fidx[key], x[0], x[1], bS, bO, round(k / n * 100, 1)])

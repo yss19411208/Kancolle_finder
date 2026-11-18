@@ -1462,7 +1462,7 @@ function renderEnemyWith(map, node, D, v, fdrops) {
   if (!v) { $('enemyBody').innerHTML = '<div class="no-data">このマスの敵編成の記録はまだありません</div>'; return; }
   const FM = D.formations || {};
   const mo = v.months.map(m => m.replace('-', '年') + '月').join('・');
-  let h = `<p class="enemy-note">${mo}にこのマスで勝った記録 ${v.n.toLocaleString()} 件から、出た割合の多い順に並べています（0.5% 未満のものは省略）。`
+  let h = `<p class="enemy-note">${mo}にこのマスで勝った記録 ${v.n.toLocaleString()} 件から、出た割合の多い順に、誤記録として除いたもの以外をすべて並べています。`
     + `敵艦の性能は KC3改のデータです。</p>`;
   const sh = enemyShip;
   const si = sh ? (fdrops.ships || {})[sh] : null;     // 選んだ艦の「ドロップした編成」(期間を合わせて全記録から)
@@ -1480,13 +1480,13 @@ function renderEnemyWith(map, node, D, v, fdrops) {
         const f = fl[fi] || { s: [], s2: [], c: -1 };
         h += `<tr${f.c >= 0 ? ` onclick="document.getElementById('fleet_${f.c}').scrollIntoView({behavior:'smooth',block:'start'})"` : ''}>`
           + `<td class="star">★</td><td>${lineup(f.s, D)}${f.s2 && f.s2.length ? `<span class="fleet-sep">随伴</span>${lineup(f.s2, D)}` : ''}`
-          + (f.c < 0 ? '<span class="old-fleet">今は出ていない編成</span>' : '') + '</td>'
+          + (f.c < 0 ? `<span class="old-fleet">${f.recent ? '先月まで出ていた編成' : '最近は出ていない編成'}</span>` : '') + '</td>'
           + `<td>${r}%</td><td><b>${pctE(a, bS)}</b><span class="sub">（${a} / ${bS.toLocaleString()}）</span></td>`
           + `<td><b>${pctE(b, bO)}</b><span class="sub">（${b} / ${bO.toLocaleString()}）</span></td></tr>`;
       }
       h += '</tbody></table>';
       if (si.other && si.other[0] + si.other[1])
-        h += `<div class="enemy-note">ほかに、まれな編成（出た割合 0.5% 未満）などで S 勝利 ${si.other[0]} 件・A/B 勝利 ${si.other[1]} 件</div>`;
+        h += `<div class="enemy-note">ほかに、誤記録の疑いのある編成で S 勝利 ${si.other[0]} 件・A/B 勝利 ${si.other[1]} 件（集計し直しが終わると消えます）</div>`;
     } else {
       h += `<div class="enemy-note">${si ? `${period}の記録では、まだ出ていません。` : 'このマスでこの艦が出た記録はありません。'}</div>`;
     }
