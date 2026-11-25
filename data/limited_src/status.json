@@ -1,17 +1,17 @@
 {
- "fetched_at": 1795489325,
+ "fetched_at": 1795568580,
  "ok": true,
  "source": "wiki",
- "got_at": 1795489325,
+ "got_at": 1795568580,
  "page": {
-  "events": 74,
-  "entries": 645,
+  "events": 75,
+  "entries": 649,
   "ongoing": 24
  },
  "files": {
   "current.html": {
    "archive": false,
-   "events": 45,
+   "events": 46,
    "ongoing": 24
   },
   "archive.html": {
@@ -20,7 +20,7 @@
    "ongoing": 0
   }
  },
- "message": "Wiki から取得しました（イベント 45 件・継続中一覧 24 海域）",
- "message_at": 1795489325,
- "changed_at": 1795489325
+ "message": "Wiki から取得しました（イベント 46 件・継続中一覧 24 海域）",
+ "message_at": 1795568580,
+ "changed_at": 1795568580
 }
