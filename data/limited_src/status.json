@@ -1,8 +1,8 @@
 {
- "fetched_at": 1795653555,
+ "fetched_at": 1795740424,
  "ok": true,
  "source": "wiki",
- "got_at": 1795653555,
+ "got_at": 1795740424,
  "page": {
   "events": 75,
   "entries": 655,
@@ -21,6 +21,6 @@
   }
  },
  "message": "Wiki から取得しました（イベント 46 件・継続中一覧 24 海域）",
- "message_at": 1795653555,
- "changed_at": 1795653555
+ "message_at": 1795740424,
+ "changed_at": 1795740424
 }
